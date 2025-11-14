@@ -1,0 +1,73 @@
+import torch
+import numpy as np
+from torch.utils.data import Dataset
+from pathlib import Path
+
+class GTZANDataset(Dataset):
+    def __init__(self, data_dir, fixed_width=1280):
+        """
+        Function called at initialisation.
+
+        Args:
+            data_dir (string): Path to the folder containing the .npy files (ex: data/processed/scalograms)
+            fixed_width (int): The fixed temporal width for all scalograms.
+        """
+
+        # Store the parameters
+        self.data_dir = Path(data_dir)
+        self.fixed_width = fixed_width
+        
+        # Find all .npy files
+        self.files = list(self.data_dir.rglob("*.npy")) # .rglob("*.npy") searches recursively in all subfolders
+        
+        if not self.files:
+            raise RuntimeError(f"No .npy file found in {data_dir}")
+
+        # Create labels from names of parent files (blues, rock...)
+        self.classes = sorted(list(set(f.parent.name for f in self.files))) # sorted() ensures the order is always the same (blues=0, classical=1...)
+        self.class_to_idx = {cls_name: i for i, cls_name in enumerate(self.classes)} # create the 'translation' dictionary
+        
+        print(f"Dataset loaded : {len(self.files)} files.")
+        print(f"Classes found : {self.classes}")
+
+    def __len__(self):
+        """
+        Give the number of samples (scalograms).
+        """
+        return len(self.files)
+
+    def __getitem__(self, idx):
+        """
+        Get an item (scalogram) based on its index
+
+        Args:
+            data_dir (int): The index of the item to retrieve
+        """
+
+        # Get the path of the file (the scalogram)
+        file_path = self.files[idx]
+        
+        # Load data
+        scalogram = np.load(file_path)
+        
+        # Get the corresponding label
+        label_name = file_path.parent.name
+        label = self.class_to_idx[label_name] # conversion into integer
+        
+        # Padding of truncating for size standardisation (width expected: self.fixed_width)
+        current_width = scalogram.shape[1]
+
+        if current_width > self.fixed_width:
+            # Too long: only keep the beginning
+            scalogram = scalogram[:, :self.fixed_width]
+        else:
+            # Too long: add zeros at the end (padding)
+            pad_width = self.fixed_width - current_width
+            scalogram = np.pad(scalogram, ((0, 0), (0, pad_width)), mode='constant') # padding((top, bottom), (left, right))
+            
+        # Convert into a PyTorch tensor
+        data_tensor = torch.from_numpy(scalogram).float().unsqueeze(0)  # unsqueeze add a dimension (of 1) at the beginning
+                                                                        # since the model expects (Channel, Height, Width)
+                                                                        # and the tensors are (Height, Width)
+        
+        return data_tensor, label

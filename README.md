@@ -64,18 +64,29 @@ of the project):
 
 Go to the root directory of the project.
 
-*TODO*
+Load and unzip the GTZAN dataset and put it on the right place (see previous 
+section).
+
+For a full pipeline, execute the following commands in order (more 
+descriptions in next sections):
+
+```
+poetry run python src/ml_audio/preprocess.py
+poetry run python src/ml_audio/train.py
+poetry run python src/ml_audio/predict.py <path_to_audio_file>
+```
 
 ### Preprocessing
 
 For preprocessing all audio files, you can run the `preprocess.py` script:
 
 ```
-poetry run python src/ml_audio/preprocess.py 
+poetry run python src/ml_audio/preprocess.py
 ```
 
 When you run this command, some files will fail. It is a known behaviour. 
-At the end though, the file preprocessing should be complete.
+At the end though, the file preprocessing should be complete (but some files
+may be missing).
 
 ```
 poetry run python src/ml_audio/preprocess.py 
@@ -95,6 +106,44 @@ Error processing file data/gtzan/audio/jazz/jazz.00054.wav:
 Files preprocessing: 100%|██████████████████████████████████████████████████████████████| 1000/1000 [04:16<00:00,  3.90it/s]
 Preprocessing done.
 ```
+
+### Training the model
+
+For training a model, you should run the following command:
+
+```
+poetry run python src/ml_audio/train.py
+```
+
+You can modify the parameters of the model from the `train.py` file:
+
+```
+# This values can be modified
+NUM_CLASSES = 10      # 10 genres
+BATCH_SIZE = 16       # Size of batches
+NUM_EPOCHS = 20       # 20 epochs
+LEARNING_RATE = 0.001 # Learning rate for the Adam optimiser
+```
+
+The file will create the files `model_trained.pth` (the trained model) 
+and `class_map.json` (the file listing labels in order).
+
+### Prediction
+
+*TODO*
+
+### Other files
+
+**`dataset.py`**
+
+This Python file contains the definition of the GTZANDataset class. It defines methods 
+`init`, `len` and `getitem` that the model will use.
+
+**`model.py`**
+
+This file loads the ReNet-18 model (transfer learning) and modifies it accordingly to 
+the needs of the project. It only defines a function and should not be called by a user 
+in command line (but it can be used in other scripts).
 
 ## Packaging
 
