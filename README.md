@@ -9,6 +9,9 @@ and environment management.
 
 The `.wav` files from the [GTZAN database](https://www.kaggle.com/datasets/andradaolteanu/gtzan-dataset-music-genre-classification?resource=download-directory) were used as an input.
 
+*The parameters have not been well tuned already, but first results with those parameters 
+show that 20 epochs seem to be too much.*
+
 ## Installation
 
 This project uses Poetry. Dependencies are specified in the
@@ -73,7 +76,7 @@ descriptions in next sections):
 ```
 poetry run python src/ml_audio/preprocess.py
 poetry run python src/ml_audio/train.py
-poetry run python src/ml_audio/predict.py <path_to_audio_file>
+poetry run python -m ml_audio.predict <path_to_audio_file>
 ```
 
 ### Preprocessing
@@ -115,7 +118,7 @@ For training a model, you should run the following command:
 poetry run python src/ml_audio/train.py
 ```
 
-You can modify the parameters of the model from the `train.py` file:
+You can (and should) modify the parameters of the model from the `train.py` file:
 
 ```
 # This values can be modified
@@ -130,7 +133,40 @@ and `class_map.json` (the file listing labels in order).
 
 ### Prediction
 
-*TODO*
+For using the model, you should use this command:
+
+```
+poetry run python -m ml_audio.predict <path_to_audio_file>
+```
+
+Where `<path_to_audio_file>` is the path to you input `.wav` file.
+
+This command will print the prediction results, including the 
+predicted label and the confidence.
+
+**Example:**
+
+Input: 
+
+```
+poetry run python -m ml_audio.predict data/gtzan/audio/blues/blues.00000.wav
+```
+
+Output:
+
+```
+Loading classes list from class_map.json...
+Loading the model architecture...
+Loading weights from model_trained.pth...
+Loading and processing the file data/gtzan/audio/blues/blues.00000.wav...
+
+--- Prediction results ---
+File: data/gtzan/audio/blues/blues.00000.wav
+Prediction: HIPHOP
+Confidence: 99.25%
+```
+
+*NB: This shows that the parameters of the model should be modified to improve performances.*
 
 ### Other files
 
