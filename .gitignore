@@ -1,0 +1,12 @@
+# Environment folder
+.venv/
+
+# Data folder
+data/
+
+# IDE files
+.vscode/
+
+# Image files
+*.png
+*.jpg
