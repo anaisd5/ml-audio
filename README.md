@@ -188,3 +188,5 @@ To create a Python Wheel (.whl) of the project:
 ```
 poetry build
 ```
+
+It creates a `dist` directory with a `.whl` and a `.tar.gz` archive.
