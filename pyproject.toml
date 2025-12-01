@@ -1,6 +1,6 @@
 [project]
 name = "ml-audio"
-version = "0.1.0"
+version = "0.2.0"
 description = "Audio Classification Project with scalograms and PyTorch."
 authors = [
     {name = "Anaïs Dubois",email = "anais.dubois5@outlook.fr"}
@@ -25,3 +25,27 @@ packages = [{include = "ml_audio", from = "src"}]
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "ruff (>=0.14.7,<0.15.0)",
+    "black (>=25.11.0,<26.0.0)",
+    "pre-commit (>=4.5.0,<5.0.0)"
+]
+
+[tool.black]
+line-length = 79
+target-version = ['py310']
+include = '\.pyi?$'
+
+[tool.ruff]
+line-length = 79
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I"]
+ignore = []
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

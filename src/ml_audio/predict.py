@@ -1,14 +1,16 @@
-import torch
+import json
+import sys
+
 import librosa
 import numpy as np
-import sys
-import json
+import torch
+
 from .model import get_audio_resnet
 
 # --- Parameters ---
 MODEL_PATH = "model_trained.pth"
 CLASS_MAP_PATH = "class_map.json"
-FIXED_WIDTH = 1280 # should be the same during training
+FIXED_WIDTH = 1280  # should be the same during training
 
 
 def preprocess_single_file(file_path):
@@ -17,7 +19,7 @@ def preprocess_single_file(file_path):
 
     Args:
         file_path (string): the path to the audio file to process
-    
+
     Returns:
         tensor_input (tensor): a tensor ready for model input
     """
@@ -25,22 +27,22 @@ def preprocess_single_file(file_path):
     print(f"Loading and processing the file {file_path}...")
     try:
         y, sr = librosa.load(file_path, sr=None)
-        
+
         # Calculate the scalogram
-        C = librosa.cqt(y, sr=sr, fmin=librosa.note_to_hz('C1'))
+        C = librosa.cqt(y, sr=sr, fmin=librosa.note_to_hz("C1"))
         C_db = librosa.amplitude_to_db(np.abs(C), ref=np.max)
-        
+
         # Manage padding / truncating (as in the dataset)
         current_width = C_db.shape[1]
         if current_width > FIXED_WIDTH:
             C_db = C_db[:, :FIXED_WIDTH]
         else:
             pad_width = FIXED_WIDTH - current_width
-            C_db = np.pad(C_db, ((0, 0), (0, pad_width)), mode='constant')
-            
+            C_db = np.pad(C_db, ((0, 0), (0, pad_width)), mode="constant")
+
         # Format for PyTorch (Batch=1, Channel=1, H, W)
         tensor_input = torch.from_numpy(C_db).float().unsqueeze(0).unsqueeze(0)
-        
+
         return tensor_input
 
     except Exception as e:
@@ -53,9 +55,10 @@ def predict(file_to_predict):
     Principal prediction function.
 
     Args:
-        file_to_predict (string): the path to the audio file to make prediction on
+        file_to_predict (string): the path to the audio file to
+        make prediction on
     """
-    
+
     # Loading classes list (from JSON)
     print(f"Loading classes list from {CLASS_MAP_PATH}...")
     try:
@@ -66,12 +69,12 @@ def predict(file_to_predict):
         print(f"Error : File {CLASS_MAP_PATH} not found.")
         print("Please launch train.py first to generate the model.")
         sys.exit(1)
-    
+
     # Load model architecture
     print("Loading the model architecture...")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = get_audio_resnet(num_classes=num_classes).to(device)
-    
+
     # Load the trained weights
     print(f"Loading weights from {MODEL_PATH}...")
     try:
@@ -80,8 +83,8 @@ def predict(file_to_predict):
         print(f"Error: File {MODEL_PATH} not found.")
         print("Please launch train.py first to generate the model.")
         sys.exit(1)
-        
-    model.eval() # put the model in validation mode
+
+    model.eval()  # put the model in validation mode
 
     # Preprocess the audio file
     input_tensor = preprocess_single_file(file_to_predict)
@@ -94,7 +97,7 @@ def predict(file_to_predict):
         output_logits = model(input_tensor)
         probabilities = torch.softmax(output_logits, dim=1)
         predicted_index = probabilities.argmax(dim=1).item()
-        
+
         predicted_class = classes[predicted_index]
         confidence = probabilities[0][predicted_index].item()
 
@@ -106,8 +109,11 @@ def predict(file_to_predict):
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("Usage: poetry run python src/ml_audio/predict.py <path_to_audio_file>")
+        print(
+            "Usage: \
+              poetry run python src/ml_audio/predict.py <path_to_audio_file>"
+        )
         sys.exit(1)
-        
+
     file_path = sys.argv[1]
     predict(file_path)

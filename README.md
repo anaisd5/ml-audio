@@ -9,7 +9,7 @@ and environment management.
 
 The `.wav` files from the [GTZAN database](https://www.kaggle.com/datasets/andradaolteanu/gtzan-dataset-music-genre-classification?resource=download-directory) were used as an input.
 
-*The parameters have not been well tuned already, but first results with those parameters 
+*The parameters have not been well tuned already, but first results with those parameters
 show that 20 epochs seem to be too much.*
 
 ## Installation
@@ -35,11 +35,11 @@ poetry install
 
 ### Download `.wav` files
 
-For this project, you should download the GTZAN dataset by 
+For this project, you should download the GTZAN dataset by
 [follow this link](https://www.kaggle.com/datasets/andradaolteanu/gtzan-dataset-music-genre-classification?resource=download-directory).
 
 You should unzip the file and copy paste the folders from the `genres_original` folder
-into the `data/gtzan/audio` folder. You should obtain this tree (from the root 
+into the `data/gtzan/audio` folder. You should obtain this tree (from the root
 of the project):
 
 ```
@@ -67,32 +67,33 @@ of the project):
 
 Go to the root directory of the project.
 
-Load and unzip the GTZAN dataset and put it on the right place (see previous 
+Load and unzip the GTZAN dataset and put it on the right place (see previous
 section).
 
-For a full pipeline, execute the following commands in order (more 
+For a full pipeline, execute the following commands in order (more
 descriptions in next sections):
 
 ```
-poetry run python src/ml_audio/preprocess.py
-poetry run python src/ml_audio/train.py
+# Run as modules to handle relative imports correctly
+poetry run python -m ml_audio.preprocess
+poetry run python -m ml_audio.train
 poetry run python -m ml_audio.predict <path_to_audio_file>
 ```
 
 ### Preprocessing
 
-For preprocessing all audio files, you can run the `preprocess.py` script:
+For preprocessing all audio files, you can run the `preprocess` module:
 
 ```
-poetry run python src/ml_audio/preprocess.py
+poetry run python -m ml_audio.preprocess
 ```
 
-When you run this command, some files will fail. It is a known behaviour. 
+When you run this command, some files will fail. It is a known behaviour.
 At the end though, the file preprocessing should be complete (but some files
 may be missing).
 
 ```
-poetry run python src/ml_audio/preprocess.py 
+poetry run python -m ml_audio.preprocess
 
 Starting preprocessing...
 Source: data/gtzan/audio
@@ -105,7 +106,7 @@ ml-audio/.venv/lib/python3.10/site-packages/librosa/core/audio.py:184: FutureWar
         Deprecated as of librosa version 0.10.0.
         It will be removed in librosa version 1.0.
   y, sr_native = __audioread_load(path, offset, duration, dtype)
-Error processing file data/gtzan/audio/jazz/jazz.00054.wav: 
+Error processing file data/gtzan/audio/jazz/jazz.00054.wav:
 Files preprocessing: 100%|██████████████████████████████████████████████████████████████| 1000/1000 [04:16<00:00,  3.90it/s]
 Preprocessing done.
 ```
@@ -115,7 +116,7 @@ Preprocessing done.
 For training a model, you should run the following command:
 
 ```
-poetry run python src/ml_audio/train.py
+poetry run python -m ml_audio.train
 ```
 
 You can (and should) modify the parameters of the model from the `train.py` file:
@@ -128,7 +129,7 @@ NUM_EPOCHS = 20       # 20 epochs
 LEARNING_RATE = 0.001 # Learning rate for the Adam optimiser
 ```
 
-The file will create the files `model_trained.pth` (the trained model) 
+The file will create the files `model_trained.pth` (the trained model)
 and `class_map.json` (the file listing labels in order).
 
 ### Prediction
@@ -141,12 +142,12 @@ poetry run python -m ml_audio.predict <path_to_audio_file>
 
 Where `<path_to_audio_file>` is the path to you input `.wav` file.
 
-This command will print the prediction results, including the 
+This command will print the prediction results, including the
 predicted label and the confidence.
 
 **Example:**
 
-Input: 
+Input:
 
 ```
 poetry run python -m ml_audio.predict data/gtzan/audio/blues/blues.00000.wav
@@ -172,13 +173,13 @@ Confidence: 99.25%
 
 **`dataset.py`**
 
-This Python file contains the definition of the GTZANDataset class. It defines methods 
+This Python file contains the definition of the GTZANDataset class. It defines methods
 `init`, `len` and `getitem` that the model will use.
 
 **`model.py`**
 
-This file loads the ReNet-18 model (transfer learning) and modifies it accordingly to 
-the needs of the project. It only defines a function and should not be called by a user 
+This file loads the ReNet-18 model (transfer learning) and modifies it accordingly to
+the needs of the project. It only defines a function and should not be called by a user
 in command line (but it can be used in other scripts).
 
 ## Packaging
@@ -190,3 +191,28 @@ poetry build
 ```
 
 It creates a `dist` directory with a `.whl` and a `.tar.gz` archive.
+
+## Static Code Analysis & Automation
+
+**Ruff** (linter and import sorter) and **Black** (code formatter) are used to ensure
+code quality and consistency.
+
+### Static analysis setup
+
+* **Configuration:** The configuration is centralised in the `pyproject.toml` file.
+* **Installation:** Dependencies are managed via Poetry, run `poetry install`.
+* **Manual Execution:**
+    * Run linter: `poetry run ruff check .` and if automatic correction is possible run
+    `poetry run ruff check . --fix`.
+    * Run formatter: `poetry run black --check .` for checking and `poetry run black .` for reformatting.
+
+### Automation (pre-commit hooks)
+
+The [`pre-commit` framework](https://github.com/pre-commit/pre-commit-hooks) is used to automatically run
+checks and formatting before every commit.
+
+* **Configuration:** See `.pre-commit-config.yaml` at the root.
+* **Setup:** To activate the hooks locally, run `poetry run pre-commit install`.
+* **Usage:** Once installed, the hooks will run automatically on `git commit`.
+If formatting issues are found, the commit will be blocked, and the files will be automatically fixed.
+You simply need to `git add` the fixed files and commit again.
