@@ -4,6 +4,11 @@
 # Data folder
 data/
 
+# Audio files
+*.wav
+*.mp3
+*.m4a
+
 # IDE files
 .vscode/
 

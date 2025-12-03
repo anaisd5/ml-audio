@@ -1,8 +1,12 @@
+import logging
 from pathlib import Path
 
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+
+# Logging
+logger = logging.getLogger(__name__)
 
 
 class GTZANDataset(Dataset):
@@ -37,8 +41,8 @@ class GTZANDataset(Dataset):
             cls_name: i for i, cls_name in enumerate(self.classes)
         }
 
-        print(f"Dataset loaded : {len(self.files)} files.")
-        print(f"Classes found : {self.classes}")
+        logger.info(f"Dataset loaded : {len(self.files)} files.")
+        logger.info(f"Classes found : {self.classes}")
 
     def __len__(self):
         """

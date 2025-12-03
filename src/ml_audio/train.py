@@ -1,4 +1,6 @@
+import argparse
 import json
+import logging
 import sys
 
 import torch
@@ -11,12 +13,15 @@ from torch.utils.data import DataLoader, Subset
 from .dataset import GTZANDataset
 from .model import get_audio_resnet
 
+# Declare the logger at module level
+logger = logging.getLogger(__name__)
+
 # --- Hyperparameters ---
 
 # This values can be modified
 NUM_CLASSES = 10  # 10 genres
 BATCH_SIZE = 16  # Size of batches
-NUM_EPOCHS = 20  # 20 epochs
+NUM_EPOCHS = 15  # 15 epochs
 LEARNING_RATE = 0.001  # Learning rate for the Adam optimiser
 DATA_DIR = "data/processed/scalograms"  # Folder of .npy files
 MODEL_SAVE_PATH = "model_trained.pth"
@@ -28,11 +33,11 @@ def train():
     Function for training the model
     """
 
-    print("Beginning training...")
+    logger.info("Beginning training")
 
     # Hardware configuration
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using: {device}")
+    logger.info(f"Using: {device}")
 
     # --- Preparing data ---
 
@@ -40,15 +45,17 @@ def train():
     try:
         full_dataset = GTZANDataset(data_dir=DATA_DIR)
     except RuntimeError as e:
-        print(f"Error loading the dataset: {e}")
-        print(f"Check if the folder '{DATA_DIR}' contains the files .npy")
+        logger.critical(f"Error loading the dataset: {e}")
+        logger.critical(
+            f"Check if the folder '{DATA_DIR}' contains the files .npy"
+        )
         sys.exit(1)
 
     # Save the class mapping (for predict.py)
     class_map = {"classes": full_dataset.classes}
     with open(MAP_SAVE_PATH, "w") as f:
         json.dump(class_map, f)
-    print(f"Mapping classes saved in: {MAP_SAVE_PATH}")
+    logger.info(f"Mapping classes saved in: {MAP_SAVE_PATH}")
 
     # Separate training (80%) and validation (20%)
     labels = [f.parent.name for f in full_dataset.files]
@@ -62,8 +69,8 @@ def train():
     train_dataset = Subset(full_dataset, train_idx)
     val_dataset = Subset(full_dataset, val_idx)
 
-    print(f"Training set size: {len(train_dataset)}")
-    print(f"Validation set size: {len(val_dataset)}")
+    logger.info(f"Training set size: {len(train_dataset)}")
+    logger.info(f"Validation set size: {len(val_dataset)}")
 
     # Create Dataloaders
     train_loader = DataLoader(
@@ -84,7 +91,7 @@ def train():
     # --- Traning and validation loop ---
 
     for epoch in range(NUM_EPOCHS):
-        print(f"\n--- Epoch {epoch + 1}/{NUM_EPOCHS} ---")
+        logger.info(f"--- Starting Epoch {epoch + 1}/{NUM_EPOCHS} ---")
 
         # Training phase
         model.train()  # Put the model on training mode
@@ -112,9 +119,9 @@ def train():
 
         epoch_loss = running_loss / len(train_dataset)
         epoch_acc = 100 * correct_train / total_train
-        print(
-            f"Training: Loss = {epoch_loss:.4f}, \
-              Accuracy = {epoch_acc:.2f}%"
+        logger.info(
+            f"Epoch {epoch+1} - Train Loss: {epoch_loss:.4f}, \
+                Acc: {epoch_acc:.2f}%"
         )
 
         # --- Validation phase ---
@@ -138,17 +145,44 @@ def train():
 
         epoch_val_loss = val_loss / len(val_dataset)
         epoch_val_acc = 100 * correct_val / total_val
-        print(
-            f"Validation: Loss = {epoch_val_loss:.4f}, \
-              Accuracy = {epoch_val_acc:.2f}%"
+        logger.info(
+            f"Epoch {epoch+1} - Val Loss: {epoch_val_loss:.4f}, \
+                Acc: {epoch_val_acc:.2f}%"
         )
 
-    print("\nTraining done.")
+    logger.info("Training done.")
 
     # --- Save the model ---
     torch.save(model.state_dict(), MODEL_SAVE_PATH)
-    print(f"Model saved in: {MODEL_SAVE_PATH}")
+    logger.info(f"Model saved in: {MODEL_SAVE_PATH}")
 
 
 if __name__ == "__main__":
+    # Argument parser
+    parser = argparse.ArgumentParser(description="Preprocess audio files.")
+    parser.add_argument(
+        "--log",
+        default="INFO",
+        help="Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+    )
+
+    args = parser.parse_args()
+
+    loglevel = args.log
+    numeric_level = getattr(logging, loglevel.upper(), None)
+    if not isinstance(numeric_level, int):
+        raise ValueError("Invalid log level: %s" % loglevel)
+
+    logging.getLogger().setLevel(numeric_level)
+
+    # Configuration of the logging
+    logging.basicConfig(
+        level=numeric_level,
+        format="[%(levelname)s]\t%(asctime)s\t%(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        force=True,  # delete any previous configuration
+    )
+    logger = logging.getLogger(__name__)
+
+    # Call the training function
     train()

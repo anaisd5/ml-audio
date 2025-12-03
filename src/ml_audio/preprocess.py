@@ -1,9 +1,14 @@
+import argparse
+import logging
 import sys
 from pathlib import Path
 
 import librosa
 import numpy as np
 from tqdm import tqdm
+
+# Declare the logger at module level
+logger = logging.getLogger(__name__)
 
 # Files definition
 SOURCE_DIR = Path("data/gtzan/audio/")
@@ -25,9 +30,17 @@ def process_file(file_path, target_path):
 
     try:
         # Load the audio file
+        logger.debug(f"Processing file: {file_path}")
 
         # y is the audio signal, sr is the sample rate
         y, sr = librosa.load(file_path, sr=None)
+
+        # If the file is very short, warn the user
+        if librosa.get_duration(y=y, sr=sr) < 1.0:
+            logger.warning(
+                f"File {file_path} is very short (< 1s). \
+                           Quality might be poor."
+            )
 
         # Do the Constant Q Transform
 
@@ -43,14 +56,41 @@ def process_file(file_path, target_path):
         np.save(target_path, C_db)
 
     except Exception as e:
-        print(f"Error processing file {file_path}: {e}", file=sys.stderr)
+        logger.error(f"Failed to process {file_path}: {e}")
 
 
 # Main code
 if __name__ == "__main__":
-    print("Starting preprocessing...")
-    print(f"Source: {SOURCE_DIR}")
-    print(f"Destination: {TARGET_DIR}")
+    # Argument parser
+    parser = argparse.ArgumentParser(description="Preprocess audio files.")
+    parser.add_argument(
+        "--log",
+        default="INFO",
+        help="Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+    )
+
+    args = parser.parse_args()
+
+    loglevel = args.log
+    numeric_level = getattr(logging, loglevel.upper(), None)
+    if not isinstance(numeric_level, int):
+        raise ValueError("Invalid log level: %s" % loglevel)
+
+    logging.getLogger().setLevel(numeric_level)
+
+    # Configuration of the logging
+    logging.basicConfig(
+        level=numeric_level,
+        format="[%(levelname)s]\t%(asctime)s\t%(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        force=True,  # delete any previous configuration
+    )
+    logger = logging.getLogger(__name__)
+
+    # Start preprocessing
+    logger.info("Starting preprocessing")
+    logger.info(f"Source: {SOURCE_DIR}")
+    logger.info(f"Destination: {TARGET_DIR}")
 
     # Find all audio files
 
@@ -58,10 +98,10 @@ if __name__ == "__main__":
     audio_files = list(SOURCE_DIR.rglob("*.wav"))
 
     if not audio_files:
-        print(f"Error : No .wav file found in {SOURCE_DIR}")
+        logger.critical(f"Error : No .wav file found in {SOURCE_DIR}")
         sys.exit(1)
 
-    print(f"{len(audio_files)} audio files found.")
+    logger.info(f"{len(audio_files)} audio files found.")
 
     # Main loop for preprocessing
 
@@ -86,4 +126,4 @@ if __name__ == "__main__":
         # Call the function to process the file
         process_file(file_path, target_path)
 
-    print("Preprocessing done.")
+    logger.info("Preprocessing done.")

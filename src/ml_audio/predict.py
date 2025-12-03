@@ -1,4 +1,6 @@
+import argparse
 import json
+import logging
 import sys
 
 import librosa
@@ -6,6 +8,9 @@ import numpy as np
 import torch
 
 from .model import get_audio_resnet
+
+# Declare the logger at module level
+logger = logging.getLogger(__name__)
 
 # --- Parameters ---
 MODEL_PATH = "model_trained.pth"
@@ -24,9 +29,16 @@ def preprocess_single_file(file_path):
         tensor_input (tensor): a tensor ready for model input
     """
 
-    print(f"Loading and processing the file {file_path}...")
+    logger.info(f"Loading and processing the file {file_path}")
     try:
         y, sr = librosa.load(file_path, sr=None)
+
+        # If the file is very short, warn the user
+        if librosa.get_duration(y=y, sr=sr) < 1.0:
+            logger.warning(
+                f"File {file_path} is very short (< 1s). \
+                           Quality might be poor."
+            )
 
         # Calculate the scalogram
         C = librosa.cqt(y, sr=sr, fmin=librosa.note_to_hz("C1"))
@@ -46,7 +58,7 @@ def preprocess_single_file(file_path):
         return tensor_input
 
     except Exception as e:
-        print(f"Error processing the file: {e}")
+        logger.error(f"Error processing the file: {e}")
         return None
 
 
@@ -60,28 +72,28 @@ def predict(file_to_predict):
     """
 
     # Loading classes list (from JSON)
-    print(f"Loading classes list from {CLASS_MAP_PATH}...")
+    logger.info(f"Loading classes list from {CLASS_MAP_PATH}")
     try:
         with open(CLASS_MAP_PATH, "r") as f:
             classes = json.load(f)["classes"]
         num_classes = len(classes)
     except FileNotFoundError:
-        print(f"Error : File {CLASS_MAP_PATH} not found.")
-        print("Please launch train.py first to generate the model.")
+        logger.critical(f"Error : File {CLASS_MAP_PATH} not found.")
+        logger.critical("Please launch train.py first to generate the model.")
         sys.exit(1)
 
     # Load model architecture
-    print("Loading the model architecture...")
+    logger.info("Loading the model architecture")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = get_audio_resnet(num_classes=num_classes).to(device)
 
     # Load the trained weights
-    print(f"Loading weights from {MODEL_PATH}...")
+    logger.info(f"Loading weights from {MODEL_PATH}")
     try:
         model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
     except FileNotFoundError:
-        print(f"Error: File {MODEL_PATH} not found.")
-        print("Please launch train.py first to generate the model.")
+        logger.critical(f"Error: File {MODEL_PATH} not found.")
+        logger.critical("Please launch train.py first to generate the model.")
         sys.exit(1)
 
     model.eval()  # put the model in validation mode
@@ -108,12 +120,38 @@ def predict(file_to_predict):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print(
-            "Usage: \
-              poetry run python src/ml_audio/predict.py <path_to_audio_file>"
-        )
-        sys.exit(1)
 
-    file_path = sys.argv[1]
-    predict(file_path)
+    # Argument parser
+    parser = argparse.ArgumentParser(description="Preprocess audio files.")
+
+    # Obligatory argument: file path
+    parser.add_argument(
+        "file_path", type=str, help="Path to the audio file to predict"
+    )
+
+    # Optional argument: logging level
+    parser.add_argument(
+        "--log",
+        default="INFO",
+        help="Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+    )
+
+    args = parser.parse_args()
+
+    loglevel = args.log
+    numeric_level = getattr(logging, loglevel.upper(), None)
+    if not isinstance(numeric_level, int):
+        raise ValueError("Invalid log level: %s" % loglevel)
+
+    logging.getLogger().setLevel(numeric_level)
+
+    # Configuration of the logging
+    logging.basicConfig(
+        level=numeric_level,
+        format="[%(levelname)s]\t%(asctime)s\t%(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        force=True,  # delete any previous configuration
+    )
+    logger = logging.getLogger(__name__)
+
+    predict(args.file_path)

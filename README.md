@@ -9,9 +9,6 @@ and environment management.
 
 The `.wav` files from the [GTZAN database](https://www.kaggle.com/datasets/andradaolteanu/gtzan-dataset-music-genre-classification?resource=download-directory) were used as an input.
 
-*The parameters have not been well tuned already, but first results with those parameters
-show that 20 epochs seem to be too much.*
-
 ## Installation
 
 This project uses Poetry. Dependencies are specified in the
@@ -80,6 +77,16 @@ poetry run python -m ml_audio.train
 poetry run python -m ml_audio.predict <path_to_audio_file>
 ```
 
+For those three files, you can use the optional `--log` argument to indicate
+the minimal level of logs. By default, it is set to `INFO`. You can choose
+`DEBUG`, `INFO`, `WARNING`, `ERROR` or `CRITICAL`.
+
+For example, to set it to `WARNING`, type:
+
+```
+poetry run python -m ml_audio.preprocess --log=WARNING
+```
+
 ### Preprocessing
 
 For preprocessing all audio files, you can run the `preprocess` module:
@@ -95,20 +102,19 @@ may be missing).
 ```
 poetry run python -m ml_audio.preprocess
 
-Starting preprocessing...
-Source: data/gtzan/audio
-Destination: data/processed/scalograms
-1000 audio files found.
-Files preprocessing:  55%|██████████████████████████████████▋                            | 551/1000 [02:41<01:52,  3.99it/s]
-ml-audio/src/ml_audio/preprocess.py:27: UserWarning: PySoundFile failed. Trying audioread instead.
-  y, sr = librosa.load(file_path, sr=None) # y is the audio signal, sr is the sample rate
-ml-audio/.venv/lib/python3.10/site-packages/librosa/core/audio.py:184: FutureWarning: librosa.core.audio.__audioread_load
+[INFO]  2025-12-03 23:37:13     Starting preprocessing
+[INFO]  2025-12-03 23:37:13     Source: data/gtzan/audio
+[INFO]  2025-12-03 23:37:13     Destination: data/processed/scalograms
+[INFO]  2025-12-03 23:37:13     1000 audio files found.
+Files preprocessing:  55%|████████████████████████████████████████████▎                                   | 554/1000 [03:56<03:25,  2.17it/s]/mnt/c/Users/anais/Documents/Cours 3A/Majeure_info/Technological_Foundations_of_Software_Development/TODO4/ml-audio/src/ml_audio/preprocess.py:37: UserWarning: PySoundFile failed. Trying audioread instead.
+  y, sr = librosa.load(file_path, sr=None)
+/mnt/c/Users/anais/Documents/Cours 3A/Majeure_info/Technological_Foundations_of_Software_Development/TODO4/ml-audio/.venv/lib/python3.10/site-packages/librosa/core/audio.py:184: FutureWarning: librosa.core.audio.__audioread_load
         Deprecated as of librosa version 0.10.0.
         It will be removed in librosa version 1.0.
   y, sr_native = __audioread_load(path, offset, duration, dtype)
-Error processing file data/gtzan/audio/jazz/jazz.00054.wav:
-Files preprocessing: 100%|██████████████████████████████████████████████████████████████| 1000/1000 [04:16<00:00,  3.90it/s]
-Preprocessing done.
+[ERROR] 2025-12-03 23:41:10     Failed to process data/gtzan/audio/jazz/jazz.00054.wav:
+Files preprocessing: 100%|███████████████████████████████████████████████████████████████████████████████| 1000/1000 [06:06<00:00,  2.73it/s]
+[INFO]  2025-12-03 23:43:20     Preprocessing done.
 ```
 
 ### Training the model
@@ -119,13 +125,13 @@ For training a model, you should run the following command:
 poetry run python -m ml_audio.train
 ```
 
-You can (and should) modify the parameters of the model from the `train.py` file:
+You can modify the parameters of the model from the `train.py` file:
 
 ```
 # This values can be modified
 NUM_CLASSES = 10      # 10 genres
 BATCH_SIZE = 16       # Size of batches
-NUM_EPOCHS = 20       # 20 epochs
+NUM_EPOCHS = 15       # 15 epochs
 LEARNING_RATE = 0.001 # Learning rate for the Adam optimiser
 ```
 
@@ -150,24 +156,22 @@ predicted label and the confidence.
 Input:
 
 ```
-poetry run python -m ml_audio.predict data/gtzan/audio/blues/blues.00000.wav
+poetry run python -m ml_audio.predict data/gtzan/audio/blues/blues.00010.wav
 ```
 
 Output:
 
 ```
-Loading classes list from class_map.json...
-Loading the model architecture...
-Loading weights from model_trained.pth...
-Loading and processing the file data/gtzan/audio/blues/blues.00000.wav...
+[INFO]  2025-12-04 00:24:54     Loading classes list from class_map.json
+[INFO]  2025-12-04 00:24:54     Loading the model architecture
+[INFO]  2025-12-04 00:24:55     Loading weights from model_trained.pth
+[INFO]  2025-12-04 00:24:55     Loading and processing the file ./data/gtzan/audio/blues/blues.00010.wav
 
 --- Prediction results ---
-File: data/gtzan/audio/blues/blues.00000.wav
-Prediction: HIPHOP
-Confidence: 99.25%
+File: ./data/gtzan/audio/blues/blues.00010.wav
+Prediction: BLUES
+Confidence: 98.46%
 ```
-
-*NB: This shows that the parameters of the model should be modified to improve performances.*
 
 ### Other files
 
