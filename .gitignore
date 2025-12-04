@@ -22,3 +22,4 @@ model_trained.pth
 
 # Pycache
 src/ml_audio/__pycache__/
+tests/__pycache__/

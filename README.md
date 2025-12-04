@@ -186,6 +186,15 @@ This file loads the ReNet-18 model (transfer learning) and modifies it according
 the needs of the project. It only defines a function and should not be called by a user
 in command line (but it can be used in other scripts).
 
+## Testing
+
+Unit tests are implemented thanks to `pytest`. They are written in the `test` folder
+and can be run thanks to this command:
+
+```
+poetry run pytest
+```
+
 ## Packaging
 
 To create a Python Wheel (.whl) of the project:
