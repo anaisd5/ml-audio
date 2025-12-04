@@ -1,13 +1,21 @@
 # Audio Classification Project (Machine Learning)
 
+![License](https://img.shields.io/badge/license-MIT-blue)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![Poetry](https://img.shields.io/badge/packaging-poetry-cyan)
+
 This project is an implementation of an audio classification system
 using `librosa` for scalogram creation and `PyTorch` for the
-machine learning model.
+machine learning model (based on `ResNet-18`). It is managed with
+[Poetry](https://python-poetry.org/) for dependency and environment
+management. The `.wav` files from the [GTZAN database](https://www.kaggle.com/datasets/andradaolteanu/gtzan-dataset-music-genre-classification?resource=download-directory)
+were used as an input.
 
-It is managed with [Poetry](https://python-poetry.org/) for dependency
-and environment management.
+**Goal:** Accurately classify audio tracks into 10 musical genres (blues, classical,
+rock, etc.) using Deep Learning on the GTZAN dataset.
 
-The `.wav` files from the [GTZAN database](https://www.kaggle.com/datasets/andradaolteanu/gtzan-dataset-music-genre-classification?resource=download-directory) were used as an input.
+**Target audience:** Students and developers interested in audio processing pipelines or
+`PyTorch` implementation of CNNs for spectrograms.
 
 ## Installation
 
@@ -173,7 +181,7 @@ Prediction: BLUES
 Confidence: 98.46%
 ```
 
-### Other files
+### Other source files
 
 **`dataset.py`**
 
@@ -229,3 +237,25 @@ checks and formatting before every commit.
 * **Usage:** Once installed, the hooks will run automatically on `git commit`.
 If formatting issues are found, the commit will be blocked, and the files will be automatically fixed.
 You simply need to `git add` the fixed files and commit again.
+
+## Contributing
+
+Contributions are welcome! Please follow this rules for contributing:
+
+1. Fork the repository.
+2. Create a branch (`git checkout -b feature/amazing-feature`).
+3. Make sure your code passes the **static analysis** and **tests** (see above).
+4. Commit your changes (`git commit -m 'Adding some amazing feature'`).
+5. Push to the branch (`git push origin feature/amazing-feature`).
+6. Open a Pull Request.
+
+## License
+
+Distributed under the MIT License. See [`LICENSE`](https://github.com/anaisd5/ml-audio/blob/main/LICENSE)
+for more information.
+
+## Contact
+
+Anaïs Dubois - anais.dubois5@outlook.fr
+
+Project Link: [github.com/anaisd5/ml-audio](https://github.com/anaisd5/ml-audio)
