@@ -23,3 +23,8 @@ model_trained.pth
 # Pycache
 src/ml_audio/__pycache__/
 tests/__pycache__/
+
+# Documentation
+docs/_build/
+docs/_static/
+docs/_templates/

@@ -20,12 +20,15 @@ TARGET_DIR.mkdir(parents=True, exist_ok=True)
 
 def process_file(file_path, target_path):
     """
-    Load an audio file, transform it in a CQT scalogram
+    Load an audio file, transform it into a CQT scalogram
     and save it in a Numpy array.
 
-    Args:
-        file_path (string): the path to the audio file to process
-        target_path (string): the path to save the output file
+    :param file_path: the path to the audio file to process
+    :type file_path: str | Path
+    :param target_path: the path to save the output file
+    :type target_path: str | Path
+    :raises Exception: if the audio file cannot be loaded or processed
+    :returns: None
     """
 
     try:

@@ -8,12 +8,11 @@ def get_audio_resnet(num_classes=10):
     expected are first processed with GTZANDataset methods from dataset.py.
     It expects only one channel (the first dimension of the tensor).
 
-    Args:
-        num_classes (int): The number of output classes
-                           (e.g. 10 for genres of GTZAN dataset).
-
-    Returns:
-        torch.nn.Module: The modified ResNet model.
+    :param num_classes: the number of output classes
+                        (e.g. 10 for genres of GTZAN dataset)
+    :type num_classes: int
+    :returns: modified ResNet model
+    :rtype: torch.nn.Module
     """
 
     # Load a pre-trained ResNet-18 model

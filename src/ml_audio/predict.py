@@ -22,11 +22,11 @@ def preprocess_single_file(file_path):
     """
     Function preprocessing one file.
 
-    Args:
-        file_path (string): the path to the audio file to process
-
-    Returns:
-        tensor_input (tensor): a tensor ready for model input
+    :param file_path: the path to the audio file to process
+    :type file_path: str | Path
+    :raises Exception: if the audio file cannot be loaded or processed
+    :returns: a tensor ready for model input
+    :rtype: torch.Tensor
     """
 
     logger.info(f"Loading and processing the file {file_path}")
@@ -66,9 +66,11 @@ def predict(file_to_predict):
     """
     Principal prediction function.
 
-    Args:
-        file_to_predict (string): the path to the audio file to
-        make prediction on
+    :param file_to_predict: the path to the audio file to
+                            make prediction on
+    :type file_to_predict: str | Path
+    :raises FileNotFoundError: if model files are not found
+    :returns: None
     """
 
     # Loading classes list (from JSON)

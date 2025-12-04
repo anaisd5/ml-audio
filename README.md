@@ -194,6 +194,18 @@ This file loads the ReNet-18 model (transfer learning) and modifies it according
 the needs of the project. It only defines a function and should not be called by a user
 in command line (but it can be used in other scripts).
 
+## Documentation
+
+The project documentation is generated using **Sphinx**. It extracts docstrings from the code (reStructuredText format) and includes manually written tutorials.
+
+### How to generate the documentation
+
+1. Ensure development dependencies are installed: `poetry install`
+2. Go to the `docs` directory: `cd docs`
+3. Build the HTML files: `poetry run make html`
+4. Open the generated file `docs/_build/html/index.html` in your web browser to
+view the documentation.
+
 ## Testing
 
 Unit tests are implemented thanks to `pytest`. They are written in the `test` folder

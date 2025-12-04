@@ -30,7 +30,10 @@ MAP_SAVE_PATH = "class_map.json"
 
 def train():
     """
-    Function for training the model
+    Function for training the model.
+
+    :raises RuntimeError: if dataset cannot be loaded
+    :returns: None
     """
 
     logger.info("Beginning training")

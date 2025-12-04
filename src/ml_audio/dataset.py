@@ -14,10 +14,14 @@ class GTZANDataset(Dataset):
         """
         Function called at initialisation.
 
-        Args:
-            data_dir (string): Path to the folder containing the .npy files
-            (ex: data/processed/scalograms)
-            fixed_width (int): The fixed temporal width for all scalograms.
+        :param data_dir: path to the folder containing the
+                         .npy files (ex: data/processed/scalograms)
+        :type data_dir: str | Path
+        :param fixed_width: the fixed temporal width for all
+                            scalograms
+        :type fixed_width: int
+        :raises RuntimeError: if no .npy file is found in data_dir
+        :returns: None
         """
 
         # Store the parameters
@@ -47,15 +51,22 @@ class GTZANDataset(Dataset):
     def __len__(self):
         """
         Give the number of samples (scalograms).
+
+        :returns: number of samples
+        :rtype: int
         """
         return len(self.files)
 
     def __getitem__(self, idx):
         """
-        Get an item (scalogram) based on its index
+        Get an item (scalogram) based on its index.
 
-        Args:
-            data_dir (int): The index of the item to retrieve
+        :param idx: index of the item to retrieve
+        :type idx: int
+        :returns: a tuple (data_tensor, label)
+                  - data_tensor: the scalogram as a PyTorch tensor
+                  - label: the corresponding label as an integer
+        :rtype: tuple[torch.Tensor, int]
         """
 
         # Get the path of the file (the scalogram)
