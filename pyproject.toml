@@ -1,6 +1,6 @@
 [project]
 name = "ml-audio"
-version = "0.2.0"
+version = "0.2.1"
 description = "Audio Classification Project with scalograms and PyTorch."
 authors = [
     {name = "Anaïs Dubois",email = "anais.dubois5@outlook.fr"}
