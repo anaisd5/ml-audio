@@ -6,27 +6,23 @@
 ml-audio documentation
 ======================
 
-Add your content using ``reStructuredText`` syntax. See the
-`reStructuredText <https://www.sphinx-doc.org/en/master/usage/restructuredtext/index.html>`_
-documentation for details.
+**ml-audio** is a deep learning project for classifying music genres using PyTorch.
 
+This documentation is organized into two parts: a step-by-step tutorial for beginners and a technical reference for developers.
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
+   :caption: Getting Started
 
-.. automodule:: ml_audio.preprocess
-   :members:
+   tutorials/tutorial.md
 
-.. automodule:: ml_audio.model
-   :members:
+.. toctree::
+   :maxdepth: 2
+   :caption: Technical Documentation
 
-.. automodule:: ml_audio.dataset
-   :members:
-   :special-members:
+   references/reference.rst
 
-.. automodule:: ml_audio.train
-   :members:
+Indices and tables
+==================
 
-.. automodule:: ml_audio.predict
-   :members:
+* :ref:`genindex`
