@@ -1,0 +1,64 @@
+# When a tag is created and the tests pass: automate the creation of a release (GitHub), 
+# where you will publish your build artifacts and reports. 
+# As the release message, automatically generate the changelog based on the git history since the last tag.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"    # run on tags v*.*.* e.g. v1.0.2
+
+jobs:
+  check-code:
+  # Test code and check code quality
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0    # loading the full git history for Gitleaks
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v6.1.0
+      with:
+        python-version: "3.10"
+    - name: Install poetry
+      run: pip install poetry
+    - name: Install dependencies
+      run: poetry install
+    - name: Test with pytest
+      run: poetry run pytest
+    - name: Code smells analysis with Ruff
+      run: poetry run ruff check .
+    - name: Code format analysis with Black
+      run: poetry run black --check .
+    - name: Detect Secrets with Gitleaks
+      uses: gitleaks/gitleaks-action@v2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release:
+  # Create the release
+    needs: check-code
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write    # for creating the release
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0    # loading the full git history for the release notes
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v6.1.0
+      with:
+        python-version: "3.10"
+    - name: Install poetry
+      run: pip install poetry
+    - name: Install dependencies
+      run: poetry install
+    - name: Build artifacts
+      run: poetry build
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: dist/*                 # all the files in dist/ are attached to the release
+        generate_release_notes: true  # generate the changelog automatically
