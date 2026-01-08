@@ -46,7 +46,7 @@ jobs:
     - name: Code format analysis with Black
       run: poetry run black --check .
     - name: Detect Secrets with Gitleaks
-      uses: gitleaks/gitleaks-action@e6dab246340401bf53eec993b8f05aebe80ac636  # v2, specific SHA provided
+      uses: gitleaks/gitleaks-action@v2
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     
