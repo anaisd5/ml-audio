@@ -1,0 +1,52 @@
+# This workflow will install Python dependencies, run tests with a variety of Python versions and do code analysis
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
+
+name: Python package
+
+on: [push]
+
+jobs:
+  test:
+    # On every commit, build and run unit tests for a matrix of 3 python versions
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v6.1.0
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install poetry
+      run: pip install poetry
+    - name: Install dependencies
+      run: poetry install
+    - name: Test with pytest
+      run: poetry run pytest
+
+  analysis:
+  # On every commit, run some analysis (for code smells, code style, presence of secrets in commit, …​)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0              # download the full commits history, for Gitleaks
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v6.1.0
+      with:
+        python-version: "3.10"
+    - name: Insall poetry
+      run: pip install poetry
+    - name: Install dependencies
+      run: poetry install
+    - name: Code smells analysis with Ruff
+      run: poetry run ruff check .
+    - name: Code format analysis with Black
+      run: poetry run black --check .
+    - name: Detect Secrets with Gitleaks
+      uses: gitleaks/gitleaks-action@e6dab246340401bf53eec993b8f05aebe80ac636  # v2, specific SHA provided
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
