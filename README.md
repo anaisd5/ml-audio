@@ -268,6 +268,6 @@ for more information.
 
 ## Contact
 
-Anaïs Dubois - anais.dubois5@outlook.fr
+Anaïs Dubois
 
 Project Link: [github.com/anaisd5/ml-audio](https://github.com/anaisd5/ml-audio)
