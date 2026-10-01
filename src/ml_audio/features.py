@@ -9,7 +9,32 @@ FEATURES_DIRS = {
     "mel": "data/processed/melspectrograms",
 }
 DEFAULT_FEATURES = "cqt"  # Type of features used by default
+# Value of --features to combine the models of all types of features
+# (mean of their probabilities)
+BOTH_FEATURES = "both"
 N_MELS = 128  # Number of frequency bands of the mel spectrogram
+
+
+def get_output_paths(features=DEFAULT_FEATURES):
+    """
+    Give the paths of the files created for a type of features, so that
+    the models of the different types can be kept at the same time.
+    The names of the default type have no suffix (model_trained.pth),
+    the others end with the type (model_trained_mel.pth).
+
+    :param features: the type of features ('cqt' or 'mel'), or 'both'
+                     for the folder of the results of the combined models
+    :type features: str
+    :returns: a tuple (model_path, class_map_path, results_dir)
+    :rtype: tuple[str, str, str]
+    """
+
+    suffix = "" if features == DEFAULT_FEATURES else f"_{features}"
+    return (
+        f"model_trained{suffix}.pth",
+        f"class_map{suffix}.json",
+        f"results{suffix}",
+    )
 
 
 def compute_features(y, sr, features=DEFAULT_FEATURES):

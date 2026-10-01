@@ -76,6 +76,7 @@ You should see an output similar to:
 ```
 --- Prediction results ---
 File: data/gtzan/audio/jazz/jazz.00073.wav
+Features: cqt
 Number of segments (3 s): 10
 Prediction: JAZZ
 Confidence: 84.64%

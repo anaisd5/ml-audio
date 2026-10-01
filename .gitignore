@@ -17,8 +17,8 @@ data/
 *.jpg
 
 # Created files
-class_map.json
-model_trained.pth
+class_map*.json
+model_trained*.pth
 
 # Pycache
 src/ml_audio/__pycache__/
@@ -31,4 +31,4 @@ docs/_build/
 dist/
 
 # Results (history, reports and figures)
-results/
+results*/

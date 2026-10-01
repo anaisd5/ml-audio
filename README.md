@@ -217,19 +217,21 @@ frozen.
   ```
 * **Features:** by default, the model is trained on the CQT scalograms. The
 `--features=mel` argument trains it on the mel spectrograms (they should
-first be created with `preprocess`, see above). The type of features is
-saved in `class_map.json`, so `evaluate` and `predict` use the right one
-automatically.
-
-  **Note:** the mel spectrograms do not improve the performance. In our
-  tests, the accuracy on the test set was 65.5% with mel and 67.2% with CQT
-  (ROC AUC: 0.931 and 0.930, one training each), a difference too small to
-  be significant. The mel spectrograms were better on pop and metal, the
-  CQT scalograms on jazz and rock. The option is kept for experimentation.
+first be created with `preprocess`, see above). The files of the mel model
+have their own names (`model_trained_mel.pth`, `class_map_mel.json` and
+`results_mel`), so the two models can be kept at the same time.
 
   ```
   poetry run python -m ml_audio.train --features=mel
   ```
+
+  **Note:** alone, the mel spectrograms do not improve the performance. In
+  our tests, the accuracy on the test set was 65.5% with mel and 67.2% with
+  CQT (one training each), a difference too small to be significant. But
+  the two models do not make the same errors (the mel spectrograms were
+  better on pop and metal, the CQT scalograms on jazz and rock), so
+  **combining them improves the performance** (see the `--features=both`
+  argument in the Evaluation and Prediction sections).
 * **Standardisation:** the scalograms are standardised (mean 0, standard
 deviation 1) with values computed on the training set.
 * **Optimisation:** the learning rate is divided by 2 when the validation
@@ -274,6 +276,26 @@ Accuracy (tracks): 67.24%
 Macro ROC AUC (tracks, one vs rest): 0.930
 ```
 
+**Combining the CQT and mel models**
+
+With the `--features` argument, you can choose the model to evaluate: `cqt`
+(default), `mel` or `both`. With `both`, the probabilities given by the two
+models are averaged. The two models should first be trained (`train` with
+`--features=cqt` and `--features=mel`). The results are saved in the
+`results_mel` and `results_both` folders.
+
+```
+poetry run python -m ml_audio.evaluate --features=both
+```
+
+Results on the test set (290 tracks, one training for each model):
+
+| Model (`--features`) | Accuracy (tracks) | Macro ROC AUC |
+|----------------------|-------------------|---------------|
+| `cqt`                | 67.24%            | 0.930         |
+| `mel`                | 65.52%            | 0.931         |
+| `both`               | **70.34%**        | **0.946**     |
+
 ### Prediction
 
 For using the model, you should use this command:
@@ -308,9 +330,18 @@ Output:
 
 --- Prediction results ---
 File: data/gtzan/audio/jazz/jazz.00073.wav
+Features: cqt
 Number of segments (3 s): 10
 Prediction: JAZZ
 Confidence: 84.64%
+```
+
+As for the evaluation, the `--features` argument chooses the model: `cqt`
+(default), `mel` or `both` (mean of the probabilities of the two models,
+which should both be trained first):
+
+```
+poetry run python -m ml_audio.predict data/gtzan/audio/jazz/jazz.00073.wav --features=both
 ```
 
 ### Other source files
@@ -319,7 +350,8 @@ Confidence: 84.64%
 
 This file contains the function transforming an audio signal into a CQT scalogram
 or a mel spectrogram (`compute_features`). It is used by `preprocess.py` and
-`predict.py`, so that the same transformation is applied to all files.
+`predict.py`, so that the same transformation is applied to all files. It also gives
+the names of the files created for each type of features (`get_output_paths`).
 
 **`dataset.py`**
 

@@ -8,7 +8,7 @@ from ml_audio.dataset import (
     spec_augment,
     split_into_segments,
 )
-from ml_audio.features import N_MELS, compute_features
+from ml_audio.features import N_MELS, compute_features, get_output_paths
 
 
 def test_split_into_segments_shape():
@@ -116,3 +116,21 @@ def test_compute_features():
     for features in (cqt, mel):
         assert features.min() >= -80.0 - 1e-4
         assert features.max() <= 1e-4
+
+
+def test_get_output_paths():
+    """
+    Check that the files of the default type of features keep their
+    names and that the files of the other types have a suffix.
+    """
+    assert get_output_paths("cqt") == (
+        "model_trained.pth",
+        "class_map.json",
+        "results",
+    )
+    assert get_output_paths("mel") == (
+        "model_trained_mel.pth",
+        "class_map_mel.json",
+        "results_mel",
+    )
+    assert get_output_paths("both")[2] == "results_both"

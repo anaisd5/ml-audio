@@ -16,16 +16,18 @@ from sklearn.metrics import (
 from torch.utils.data import DataLoader
 
 from .dataset import GTZANDataset, load_split
-from .features import DEFAULT_FEATURES, FEATURES_DIRS
+from .features import (
+    BOTH_FEATURES,
+    DEFAULT_FEATURES,
+    FEATURES_DIRS,
+    get_output_paths,
+)
 from .model import get_audio_resnet
 
 # Declare the logger at module level
 logger = logging.getLogger(__name__)
 
 # --- Parameters ---
-MODEL_PATH = "model_trained.pth"
-CLASS_MAP_PATH = "class_map.json"
-RESULTS_DIR = "results"  # Folder for the reports and figures
 BATCH_SIZE = 16
 NUM_WORKERS = 2
 NUM_THREADS = 4  # CPU cores used by PyTorch (default, see --num-threads)
@@ -209,13 +211,55 @@ def evaluate(model, dataset, device, batch_size, num_workers, results_dir):
     :rtype: float
     """
 
-    results_dir = Path(results_dir)
-    results_dir.mkdir(parents=True, exist_ok=True)
-    classes = dataset.classes
-
     segment_probs, segment_labels, track_probs, track_labels = predict_dataset(
         model, dataset, device, batch_size, num_workers
     )
+
+    return evaluate_predictions(
+        segment_probs,
+        segment_labels,
+        track_probs,
+        track_labels,
+        dataset.classes,
+        results_dir,
+    )
+
+
+def evaluate_predictions(
+    segment_probs,
+    segment_labels,
+    track_probs,
+    track_labels,
+    classes,
+    results_dir,
+):
+    """
+    Evaluate predictions (given by predict_dataset). The probabilities
+    can come from one model, or be the mean of the probabilities of
+    several models. It saves a text report (accuracy, AUC, sensitivity
+    and specificity of each class...), the confusion matrix and the ROC
+    curves in results_dir.
+
+    :param segment_probs: the probabilities of the segments
+                          (Segments, Classes)
+    :type segment_probs: numpy.ndarray
+    :param segment_labels: the true labels of the segments
+    :type segment_labels: numpy.ndarray
+    :param track_probs: the probabilities of the tracks (Tracks, Classes)
+    :type track_probs: numpy.ndarray
+    :param track_labels: the true labels of the tracks
+    :type track_labels: numpy.ndarray
+    :param classes: the names of the classes
+    :type classes: list[str]
+    :param results_dir: folder where the results are saved
+    :type results_dir: str | Path
+    :returns: the accuracy on the tracks
+    :rtype: float
+    """
+
+    results_dir = Path(results_dir)
+    results_dir.mkdir(parents=True, exist_ok=True)
+
     track_preds = track_probs.argmax(axis=1)
 
     # Accuracy on the segments (3 s) and on the tracks (30 s)
@@ -238,8 +282,8 @@ def evaluate(model, dataset, device, batch_size, num_workers, results_dir):
 
     # Write the report
     lines = [
-        f"Number of tracks: {len(dataset.files)}",
-        f"Number of segments: {len(dataset)}",
+        f"Number of tracks: {len(track_labels)}",
+        f"Number of segments: {len(segment_labels)}",
         f"Accuracy (segments): {segment_acc * 100:.2f}%",
         f"Accuracy (tracks): {track_acc * 100:.2f}%",
         f"Macro ROC AUC (tracks, one vs rest): {auc:.3f}",
@@ -280,6 +324,42 @@ def evaluate(model, dataset, device, batch_size, num_workers, results_dir):
     return track_acc
 
 
+def load_model_and_dataset(features, device, split="test"):
+    """
+    Load the model trained on a type of features, and the dataset of a
+    split with the same type of features.
+
+    :param features: the type of features ('cqt' or 'mel')
+    :type features: str
+    :param device: the device used for the computation
+    :type device: torch.device
+    :param split: name of the split ('train', 'valid' or 'test')
+    :type split: str
+    :raises FileNotFoundError: if model files are not found
+    :returns: a tuple (model, dataset)
+    :rtype: tuple[torch.nn.Module, GTZANDataset]
+    """
+
+    model_path, class_map_path, _ = get_output_paths(features)
+
+    # Loading classes list and standardisation values (from JSON)
+    with open(class_map_path, "r") as f:
+        class_map = json.load(f)
+
+    dataset = GTZANDataset(
+        FEATURES_DIRS[features],
+        track_names=load_split(split),
+        mean=class_map["mean"],
+        std=class_map["std"],
+    )
+
+    model = get_audio_resnet(num_classes=len(class_map["classes"]))
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    model = model.to(device)
+
+    return model, dataset
+
+
 if __name__ == "__main__":
     # Argument parser
     parser = argparse.ArgumentParser(
@@ -310,6 +390,14 @@ if __name__ == "__main__":
         help=f"Number of CPU cores used by PyTorch (default: {NUM_THREADS}, "
         f"reduce it to keep the computer usable)",
     )
+    parser.add_argument(
+        "--features",
+        default=DEFAULT_FEATURES,
+        choices=[*FEATURES_DIRS.keys(), BOTH_FEATURES],
+        help=f"Model to evaluate: the one trained on 'cqt' or on 'mel' "
+        f"features, or '{BOTH_FEATURES}' for the mean of the probabilities "
+        f"of the two models (default: {DEFAULT_FEATURES})",
+    )
 
     args = parser.parse_args()
 
@@ -329,40 +417,60 @@ if __name__ == "__main__":
     )
     logger = logging.getLogger(__name__)
 
-    # Loading classes list and standardisation values (from JSON)
-    try:
-        with open(CLASS_MAP_PATH, "r") as f:
-            class_map = json.load(f)
-    except FileNotFoundError:
-        logger.critical(f"Error : File {CLASS_MAP_PATH} not found.")
-        logger.critical("Please launch train.py first to generate the model.")
-        sys.exit(1)
-
     # Limit the CPU cores used (by default PyTorch uses all of them,
     # which can freeze the computer)
     torch.set_num_threads(args.num_threads)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Folder of .npy files (with the type of features used during training)
-    DATA_DIR = FEATURES_DIRS[class_map.get("features", DEFAULT_FEATURES)]
+    # Types of features of the models to evaluate
+    if args.features == BOTH_FEATURES:
+        features_list = list(FEATURES_DIRS.keys())
+    else:
+        features_list = [args.features]
 
-    test_dataset = GTZANDataset(
-        DATA_DIR,
-        track_names=load_split("test"),
-        mean=class_map["mean"],
-        std=class_map["std"],
-    )
+    # Compute the probabilities given by each model
+    predictions = []
+    for features in features_list:
+        logger.info(f"Loading the model trained on '{features}' features")
+        try:
+            model, test_dataset = load_model_and_dataset(features, device)
+        except FileNotFoundError as e:
+            logger.critical(f"Error : File {e.filename} not found.")
+            logger.critical(
+                f"Please launch train.py with --features={features} first "
+                f"to generate the model."
+            )
+            sys.exit(1)
 
-    model = get_audio_resnet(num_classes=len(class_map["classes"]))
-    model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
-    model = model.to(device)
+        predictions.append(
+            predict_dataset(
+                model, test_dataset, device, args.batch_size, args.num_workers
+            )
+        )
 
-    evaluate(
-        model,
-        test_dataset,
-        device,
-        args.batch_size,
-        args.num_workers,
-        RESULTS_DIR,
+    # The segments should be the same for all models
+    segment_probs, segment_labels, track_probs, track_labels = predictions[0]
+    for other in predictions[1:]:
+        if not np.array_equal(other[1], segment_labels):
+            logger.critical(
+                "Error : the models were not evaluated on the same segments."
+            )
+            logger.critical(
+                "Please launch preprocess.py again for each type of features."
+            )
+            sys.exit(1)
+
+    # Mean of the probabilities of the models
+    segment_probs = np.mean([p[0] for p in predictions], axis=0)
+    track_probs = np.mean([p[2] for p in predictions], axis=0)
+
+    _, _, results_dir = get_output_paths(args.features)
+    evaluate_predictions(
+        segment_probs,
+        segment_labels,
+        track_probs,
+        track_labels,
+        test_dataset.classes,
+        results_dir,
     )

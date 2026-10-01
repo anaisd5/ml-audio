@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 # Import personalised modules
 from .dataset import GTZANDataset, compute_mean_std, load_split
 from .evaluate import evaluate, plot_history
-from .features import DEFAULT_FEATURES, FEATURES_DIRS
+from .features import DEFAULT_FEATURES, FEATURES_DIRS, get_output_paths
 from .model import get_audio_resnet
 
 # Declare the logger at module level
@@ -33,9 +33,6 @@ PATIENCE = 5  # Stop if the validation loss does not improve for 5 epochs
 SEED = 42  # For reproductible results
 MIXUP_ALPHA = 0.4  # Parameter of the Beta distribution for mixup
 FROZEN_LAYERS = 0  # Groups of layers frozen (default, see --frozen-layers)
-MODEL_SAVE_PATH = "model_trained.pth"
-MAP_SAVE_PATH = "class_map.json"
-RESULTS_DIR = "results"  # Folder for the history, reports and figures
 
 
 def mixup(inputs, labels, alpha=MIXUP_ALPHA):
@@ -103,6 +100,10 @@ def train(
 
     # Folder of .npy files
     DATA_DIR = FEATURES_DIRS[features]
+    # Files created (their names depend on the type of features):
+    # the model, the class mapping and the folder for the history,
+    # reports and figures
+    MODEL_SAVE_PATH, MAP_SAVE_PATH, RESULTS_DIR = get_output_paths(features)
     logger.info(f"Features: {features} ({DATA_DIR})")
 
     # Fix the seed for reproductible results
