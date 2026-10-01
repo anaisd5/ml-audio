@@ -140,20 +140,30 @@ You can modify the parameters of the model from the `train.py` file:
 NUM_CLASSES = 10        # 10 genres
 BATCH_SIZE = 16         # Size of batches (default, see --batch-size)
 NUM_WORKERS = 2         # Processes loading the data (default, see --num-workers)
-NUM_EPOCHS = 30         # Maximal number of epochs
+NUM_THREADS = 4         # CPU cores used by PyTorch (default, see --num-threads)
+NUM_EPOCHS = 50         # Maximal number of epochs
 LEARNING_RATE = 0.0001  # Learning rate for the AdamW optimiser
 WEIGHT_DECAY = 0.0001   # Weight decay (regularisation) for AdamW
 PATIENCE = 5            # Stop if the validation loss does not improve for 5 epochs
 SEED = 42               # For reproductible results
+MIXUP_ALPHA = 0.4       # Parameter of the Beta distribution for mixup
 ```
 
-The size of batches and the number of processes loading the data can also
-be changed in command line. If your computer does not have a lot of memory
-(e.g. WSL with less than 8 GB), you can reduce them:
+The parameters of SpecAugment (number and size of the masks) can be modified
+from the `dataset.py` file.
+
+The size of batches, the number of processes loading the data and the
+number of CPU cores used by PyTorch can also be changed in command line.
+If your computer does not have a lot of memory (e.g. WSL with less than
+8 GB) or freezes during the training, you can reduce them:
 
 ```
-poetry run python -m ml_audio.train --batch-size=8 --num-workers=0
+poetry run python -m ml_audio.train --batch-size=8 --num-workers=0 --num-threads=2
 ```
+
+By default, only 4 CPU cores are used so that the computer stays usable
+during the training. If you have more cores and do not need your computer
+in the meantime, you can increase `--num-threads` to train faster.
 
 **How the training works:**
 
@@ -167,6 +177,21 @@ the duplicates and puts all the tracks of an artist in the same split, so
 the results are not too optimistic. The lists of tracks are in the
 `src/ml_audio/splits` folder. The segments of a track are always in the
 same split.
+* **Data augmentation:** for the training set only, three methods are
+used to limit overfitting:
+    * *random crop:* the segments start at a random position of the track;
+    * *SpecAugment* ([Park et al., 2019](https://arxiv.org/abs/1904.08779)):
+    random bands of frequencies and intervals of time are hidden;
+    * *mixup* ([Zhang et al., 2018](https://arxiv.org/abs/1710.09412)):
+    each segment of a batch is mixed with another one, and the loss is the
+    same mix of the losses of the two labels.
+
+  To train without data augmentation (e.g. for comparison), use the
+  `--no-augment` argument:
+
+  ```
+  poetry run python -m ml_audio.train --no-augment
+  ```
 * **Standardisation:** the scalograms are standardised (mean 0, standard
 deviation 1) with values computed on the training set.
 * **Optimisation:** the learning rate is divided by 2 when the validation
@@ -191,7 +216,8 @@ You can also evaluate the saved model again with this command:
 poetry run python -m ml_audio.evaluate
 ```
 
-The `--batch-size` and `--num-workers` arguments are also available.
+The `--batch-size`, `--num-workers` and `--num-threads` arguments are also
+available.
 The prediction of a track is the mean of the probabilities of its
 segments. The command creates in the `results` folder:
 
@@ -205,9 +231,9 @@ precision, recall, F1-score, sensitivity and specificity of each genre;
 ```
 Number of tracks: 290
 Number of segments: 2900
-Accuracy (segments): 59.76%
-Accuracy (tracks): 65.52%
-Macro ROC AUC (tracks, one vs rest): 0.940
+Accuracy (segments): 60.93%
+Accuracy (tracks): 67.24%
+Macro ROC AUC (tracks, one vs rest): 0.930
 ```
 
 ### Prediction
@@ -246,7 +272,7 @@ Output:
 File: data/gtzan/audio/jazz/jazz.00073.wav
 Number of segments (3 s): 10
 Prediction: JAZZ
-Confidence: 97.01%
+Confidence: 84.64%
 ```
 
 ### Other source files
@@ -257,7 +283,8 @@ This Python file contains the definition of the GTZANDataset class. It defines m
 `init`, `len` and `getitem` that the model will use. An item of the dataset is a
 segment (about 3 s) of a scalogram. The file also contains functions for loading the
 fault-filtered split (`load_split`), cutting a scalogram into segments
-(`split_into_segments`) and computing the standardisation values (`compute_mean_std`).
+(`split_into_segments`), hiding random frequencies and times (`spec_augment`) and
+computing the standardisation values (`compute_mean_std`).
 
 **`model.py`**
 

@@ -47,10 +47,10 @@ Run the training script:
 poetry run python -m ml_audio.train
 ```
 
-If your computer does not have a lot of memory, you can reduce the size of batches and the number of processes loading the data:
+If your computer does not have a lot of memory or freezes during the training, you can reduce the size of batches, the number of processes loading the data and the number of CPU cores used:
 
 ```
-poetry run python -m ml_audio.train --batch-size=8 --num-workers=0
+poetry run python -m ml_audio.train --batch-size=8 --num-workers=0 --num-threads=2
 ```
 
 **Expected result:** The script will output the "Loss" and "Accuracy" for each epoch. The training stops automatically when the validation loss does not improve anymore (early stopping). After a few minutes, a `model_trained.pth` file (the best model) is created, and the model is evaluated on the test set.
@@ -78,7 +78,7 @@ You should see an output similar to:
 File: data/gtzan/audio/jazz/jazz.00073.wav
 Number of segments (3 s): 10
 Prediction: JAZZ
-Confidence: 97.01%
+Confidence: 84.64%
 ```
 
 Congratulations! You have successfully trained and tested an audio classification model.

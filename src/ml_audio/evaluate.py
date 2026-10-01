@@ -28,6 +28,7 @@ CLASS_MAP_PATH = "class_map.json"
 RESULTS_DIR = "results"  # Folder for the reports and figures
 BATCH_SIZE = 16
 NUM_WORKERS = 2
+NUM_THREADS = 4  # CPU cores used by PyTorch (default, see --num-threads)
 
 
 def predict_dataset(model, dataset, device, batch_size, num_workers):
@@ -302,6 +303,13 @@ if __name__ == "__main__":
         help=f"Number of processes loading the data "
         f"(default: {NUM_WORKERS}, 0 to use less memory)",
     )
+    parser.add_argument(
+        "--num-threads",
+        type=int,
+        default=NUM_THREADS,
+        help=f"Number of CPU cores used by PyTorch (default: {NUM_THREADS}, "
+        f"reduce it to keep the computer usable)",
+    )
 
     args = parser.parse_args()
 
@@ -329,6 +337,10 @@ if __name__ == "__main__":
         logger.critical(f"Error : File {CLASS_MAP_PATH} not found.")
         logger.critical("Please launch train.py first to generate the model.")
         sys.exit(1)
+
+    # Limit the CPU cores used (by default PyTorch uses all of them,
+    # which can freeze the computer)
+    torch.set_num_threads(args.num_threads)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

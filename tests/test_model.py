@@ -2,6 +2,7 @@ import torch
 from torchvision import models
 
 from ml_audio.model import get_audio_resnet
+from ml_audio.train import mixup
 
 
 def test_model_initialization():
@@ -68,3 +69,21 @@ def test_model_input_layer_pretrained():
     assert torch.allclose(
         model.conv1.weight.data, expected
     ), "The first layer should be initialised with the pretrained weights."
+
+
+def test_mixup():
+    """
+    Check that mixup mixes each example with another one of the batch
+    with a proportion between 0 and 1.
+    """
+    inputs = torch.randn(8, 1, 84, 129)
+    labels = torch.arange(8)
+
+    mixed, labels_a, labels_b, lam = mixup(inputs, labels)
+
+    assert mixed.shape == inputs.shape
+    assert 0 <= lam <= 1
+    assert torch.equal(labels_a, labels)
+    # labels_b gives the order of the other examples
+    expected = lam * inputs + (1 - lam) * inputs[labels_b]
+    assert torch.allclose(mixed, expected)

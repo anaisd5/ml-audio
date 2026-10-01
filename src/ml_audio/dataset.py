@@ -18,6 +18,11 @@ PAD_VALUE = -80.0
 # Folder containing the lists of the fault-filtered split
 SPLITS_DIR = Path(__file__).parent / "splits"
 
+# --- Data augmentation parameters (SpecAugment) ---
+NUM_MASKS = 2  # Number of masks of each type (frequency and time)
+FREQ_MASK_WIDTH = 8  # Maximal number of frequency bins hidden by a mask
+TIME_MASK_WIDTH = 20  # Maximal number of frames hidden by a mask
+
 
 def load_split(split_name):
     """
@@ -77,6 +82,49 @@ def split_into_segments(scalogram, segment_width=SEGMENT_WIDTH):
     return segments.transpose(1, 0, 2)
 
 
+def spec_augment(
+    segment,
+    num_masks=NUM_MASKS,
+    freq_mask_width=FREQ_MASK_WIDTH,
+    time_mask_width=TIME_MASK_WIDTH,
+):
+    """
+    Data augmentation (SpecAugment, Park et al., 2019): hide random bands
+    of frequencies and random intervals of time. The model learns not to
+    rely on a single detail of the scalogram. The hidden values are
+    replaced by 0, the mean of a standardised scalogram.
+
+    :param segment: the standardised segment (Height, Width)
+    :type segment: numpy.ndarray
+    :param num_masks: number of masks of each type (frequency and time)
+    :type num_masks: int
+    :param freq_mask_width: maximal number of frequency bins of a mask
+    :type freq_mask_width: int
+    :param time_mask_width: maximal number of frames of a mask
+    :type time_mask_width: int
+    :returns: a copy of the segment with the masks
+    :rtype: numpy.ndarray
+    """
+
+    # torch.randint is used (and not numpy) since PyTorch gives a
+    # different seed to each process loading the data
+    segment = segment.copy()
+    height, width = segment.shape
+
+    for _ in range(num_masks):
+        # Frequency mask: rows f0 to f0 + f are hidden
+        f = torch.randint(0, freq_mask_width + 1, (1,)).item()
+        f0 = torch.randint(0, height - f + 1, (1,)).item()
+        segment[f0 : f0 + f, :] = 0.0
+
+        # Time mask: columns t0 to t0 + t are hidden
+        t = torch.randint(0, time_mask_width + 1, (1,)).item()
+        t0 = torch.randint(0, width - t + 1, (1,)).item()
+        segment[:, t0 : t0 + t] = 0.0
+
+    return segment
+
+
 class GTZANDataset(Dataset):
     def __init__(
         self,
@@ -85,6 +133,7 @@ class GTZANDataset(Dataset):
         segment_width=SEGMENT_WIDTH,
         mean=0.0,
         std=1.0,
+        augment=False,
     ):
         """
         Function called at initialisation. Each scalogram is cut into
@@ -103,6 +152,10 @@ class GTZANDataset(Dataset):
         :type mean: float
         :param std: standard deviation used to standardise the scalograms
         :type std: float
+        :param augment: if True, data augmentation is applied (random
+                        crop in time and SpecAugment). It should only be
+                        used for the training set.
+        :type augment: bool
         :raises RuntimeError: if no .npy file is found in data_dir
         :returns: None
         """
@@ -112,6 +165,7 @@ class GTZANDataset(Dataset):
         self.segment_width = segment_width
         self.mean = mean
         self.std = std
+        self.augment = augment
 
         # Find all .npy files
 
@@ -194,7 +248,13 @@ class GTZANDataset(Dataset):
 
         # Load data (mmap_mode only reads the segment from the disk)
         scalogram = np.load(self.files[file_idx], mmap_mode="r")
-        start = segment_idx * self.segment_width
+
+        if self.augment:
+            # Random crop: the segment can start anywhere in the track
+            max_start = max(0, scalogram.shape[1] - self.segment_width)
+            start = torch.randint(0, max_start + 1, (1,)).item()
+        else:
+            start = segment_idx * self.segment_width
         segment = scalogram[:, start : start + self.segment_width]
 
         # Padding for size standardisation (if the track is too short)
@@ -202,6 +262,10 @@ class GTZANDataset(Dataset):
 
         # Standardisation (mean 0 and standard deviation 1)
         segment = (segment - self.mean) / self.std
+
+        # Hide random frequencies and times
+        if self.augment:
+            segment = spec_augment(segment)
 
         # Convert into a PyTorch tensor
 

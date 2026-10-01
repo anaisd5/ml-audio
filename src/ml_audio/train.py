@@ -24,18 +24,53 @@ logger = logging.getLogger(__name__)
 NUM_CLASSES = 10  # 10 genres
 BATCH_SIZE = 16  # Size of batches (default, see --batch-size)
 NUM_WORKERS = 2  # Processes loading the data (default, see --num-workers)
-NUM_EPOCHS = 30  # Maximal number of epochs
+NUM_THREADS = 4  # CPU cores used by PyTorch (default, see --num-threads)
+NUM_EPOCHS = 50  # Maximal number of epochs
 LEARNING_RATE = 0.0001  # Learning rate for the AdamW optimiser
 WEIGHT_DECAY = 0.0001  # Weight decay (regularisation) for AdamW
 PATIENCE = 5  # Stop if the validation loss does not improve for 5 epochs
 SEED = 42  # For reproductible results
+MIXUP_ALPHA = 0.4  # Parameter of the Beta distribution for mixup
 DATA_DIR = "data/processed/scalograms"  # Folder of .npy files
 MODEL_SAVE_PATH = "model_trained.pth"
 MAP_SAVE_PATH = "class_map.json"
 RESULTS_DIR = "results"  # Folder for the history, reports and figures
 
 
-def train(batch_size=BATCH_SIZE, num_workers=NUM_WORKERS):
+def mixup(inputs, labels, alpha=MIXUP_ALPHA):
+    """
+    Data augmentation (mixup, Zhang et al., 2018): each example of the
+    batch is mixed with another random example of the batch. The loss
+    is then the same mix of the losses of the two labels.
+
+    :param inputs: the batch of segments
+    :type inputs: torch.Tensor
+    :param labels: the labels of the batch
+    :type labels: torch.Tensor
+    :param alpha: parameter of the Beta distribution giving the
+                  proportion of the mix
+    :type alpha: float
+    :returns: a tuple (mixed_inputs, labels_a, labels_b, lam)
+              - mixed_inputs: lam * inputs + (1 - lam) * other inputs
+              - labels_a: the labels of the inputs
+              - labels_b: the labels of the other inputs
+              - lam: the proportion of the mix
+    :rtype: tuple[torch.Tensor, torch.Tensor, torch.Tensor, float]
+    """
+
+    lam = torch.distributions.Beta(alpha, alpha).sample().item()
+    # Random order of the batch: example i is mixed with example perm[i]
+    perm = torch.randperm(inputs.size(0), device=inputs.device)
+    mixed_inputs = lam * inputs + (1 - lam) * inputs[perm]
+    return mixed_inputs, labels, labels[perm], lam
+
+
+def train(
+    batch_size=BATCH_SIZE,
+    num_workers=NUM_WORKERS,
+    augment=True,
+    num_threads=NUM_THREADS,
+):
     """
     Function for training the model. The best model (lowest validation
     loss) is saved, then evaluated on the test set.
@@ -45,6 +80,12 @@ def train(batch_size=BATCH_SIZE, num_workers=NUM_WORKERS):
     :param num_workers: number of processes loading the data
                         (0 to use less memory)
     :type num_workers: int
+    :param augment: if True, data augmentation is used on the training
+                    set (random crop, SpecAugment and mixup)
+    :type augment: bool
+    :param num_threads: number of CPU cores used by PyTorch (a low value
+                        keeps the computer usable during the training)
+    :type num_threads: int
     :raises RuntimeError: if dataset cannot be loaded
     :returns: None
     """
@@ -53,6 +94,11 @@ def train(batch_size=BATCH_SIZE, num_workers=NUM_WORKERS):
 
     # Fix the seed for reproductible results
     torch.manual_seed(SEED)
+
+    # Limit the CPU cores used (by default PyTorch uses all of them,
+    # which can freeze the computer)
+    torch.set_num_threads(num_threads)
+    logger.info(f"CPU cores used by PyTorch: {num_threads}")
 
     # Hardware configuration
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -63,7 +109,9 @@ def train(batch_size=BATCH_SIZE, num_workers=NUM_WORKERS):
     # Load the datasets with the fault-filtered split
     # (the tracks of an artist are all in the same split)
     try:
-        train_dataset = GTZANDataset(DATA_DIR, track_names=load_split("train"))
+        train_dataset = GTZANDataset(
+            DATA_DIR, track_names=load_split("train"), augment=augment
+        )
     except RuntimeError as e:
         logger.critical(f"Error loading the dataset: {e}")
         logger.critical(
@@ -75,6 +123,7 @@ def train(batch_size=BATCH_SIZE, num_workers=NUM_WORKERS):
     mean, std = compute_mean_std(train_dataset)
     train_dataset.mean, train_dataset.std = mean, std
     logger.info(f"Standardisation: mean={mean:.2f}, std={std:.2f}")
+    logger.info(f"Data augmentation: {augment}")
 
     val_dataset = GTZANDataset(
         DATA_DIR, track_names=load_split("valid"), mean=mean, std=std
@@ -150,9 +199,18 @@ def train(batch_size=BATCH_SIZE, num_workers=NUM_WORKERS):
             inputs = inputs.to(device)
             labels = labels.to(device)
 
+            # Mix the examples of the batch (without augmentation,
+            # lam = 1 so nothing changes)
+            if augment:
+                inputs, labels_a, labels_b, lam = mixup(inputs, labels)
+            else:
+                labels_a, labels_b, lam = labels, labels, 1.0
+
             # Forward pass, backward pass, and optimisation
             outputs = model(inputs)
-            loss = criterion(outputs, labels)
+            loss = lam * criterion(outputs, labels_a) + (1 - lam) * criterion(
+                outputs, labels_b
+            )
 
             optimizer.zero_grad()
             loss.backward()
@@ -162,7 +220,11 @@ def train(batch_size=BATCH_SIZE, num_workers=NUM_WORKERS):
             running_loss += loss.item() * inputs.size(0)
             _, predicted = torch.max(outputs.data, 1)
             total_train += labels.size(0)
-            correct_train += (predicted == labels).sum().item()
+            # With mixup, a prediction is right in proportion of its label
+            correct_train += (
+                lam * (predicted == labels_a).sum().item()
+                + (1 - lam) * (predicted == labels_b).sum().item()
+            )
 
         epoch_loss = running_loss / len(train_dataset)
         epoch_acc = 100 * correct_train / total_train
@@ -262,6 +324,19 @@ if __name__ == "__main__":
         help=f"Number of processes loading the data "
         f"(default: {NUM_WORKERS}, 0 to use less memory)",
     )
+    parser.add_argument(
+        "--num-threads",
+        type=int,
+        default=NUM_THREADS,
+        help=f"Number of CPU cores used by PyTorch (default: {NUM_THREADS}, "
+        f"reduce it to keep the computer usable)",
+    )
+    parser.add_argument(
+        "--no-augment",
+        action="store_true",
+        help="Train without data augmentation (random crop, SpecAugment "
+        "and mixup)",
+    )
 
     args = parser.parse_args()
 
@@ -282,4 +357,9 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
 
     # Call the training function
-    train(batch_size=args.batch_size, num_workers=args.num_workers)
+    train(
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
+        augment=not args.no_augment,
+        num_threads=args.num_threads,
+    )

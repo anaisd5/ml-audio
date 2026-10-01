@@ -3,7 +3,9 @@ import numpy as np
 from ml_audio.dataset import (
     PAD_VALUE,
     SEGMENT_WIDTH,
+    GTZANDataset,
     load_split,
+    spec_augment,
     split_into_segments,
 )
 
@@ -54,3 +56,42 @@ def test_splits_are_disjoint():
     assert not train & valid
     assert not train & test
     assert not valid & test
+
+
+def test_spec_augment():
+    """
+    Check that SpecAugment keeps the shape, only hides values (set to 0)
+    and does not modify the original segment.
+    """
+    segment = np.random.randn(84, SEGMENT_WIDTH) + 10  # no value is 0
+
+    augmented = spec_augment(segment, num_masks=1, time_mask_width=20)
+
+    assert augmented.shape == segment.shape
+    # The original segment is not modified
+    assert (segment != 0).all()
+    # The values which are not hidden are unchanged
+    visible = augmented != 0
+    assert np.array_equal(augmented[visible], segment[visible])
+
+
+def test_dataset_augment(tmp_path):
+    """
+    Check that the dataset gives segments of the right shape with and
+    without augmentation, and that the segments without augmentation
+    are always the same.
+    """
+    (tmp_path / "blues").mkdir()
+    np.save(tmp_path / "blues" / "blues.00000.npy", np.random.randn(84, 1293))
+
+    dataset = GTZANDataset(tmp_path)
+    augmented_dataset = GTZANDataset(tmp_path, augment=True)
+
+    assert len(dataset) == 10
+    data, label = dataset[3]
+    augmented_data, _ = augmented_dataset[3]
+    assert data.shape == (1, 84, SEGMENT_WIDTH)
+    assert augmented_data.shape == (1, 84, SEGMENT_WIDTH)
+    assert label == 0
+    # Without augmentation, the result is always the same
+    assert (dataset[3][0] == data).all()
