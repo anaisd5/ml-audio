@@ -85,7 +85,7 @@ poetry run python -m ml_audio.train
 poetry run python -m ml_audio.predict <path_to_audio_file>
 ```
 
-For those three files, you can use the optional `--log` argument to indicate
+For those files, you can use the optional `--log` argument to indicate
 the minimal level of logs. By default, it is set to `INFO`. You can choose
 `DEBUG`, `INFO`, `WARNING`, `ERROR` or `CRITICAL`.
 
@@ -114,9 +114,9 @@ poetry run python -m ml_audio.preprocess
 [INFO]  2025-12-03 23:37:13     Source: data/gtzan/audio
 [INFO]  2025-12-03 23:37:13     Destination: data/processed/scalograms
 [INFO]  2025-12-03 23:37:13     1000 audio files found.
-Files preprocessing:  55%|████████████████████████████████████████████▎                                   | 554/1000 [03:56<03:25,  2.17it/s]/mnt/c/Users/anais/Documents/Cours 3A/Majeure_info/Technological_Foundations_of_Software_Development/TODO4/ml-audio/src/ml_audio/preprocess.py:37: UserWarning: PySoundFile failed. Trying audioread instead.
+Files preprocessing:  55%|████████████████████████████████████████████▎                                   | 554/1000 [03:56<03:25,  2.17it/s]/ml_audio/preprocess.py:37: UserWarning: PySoundFile failed. Trying audioread instead.
   y, sr = librosa.load(file_path, sr=None)
-/mnt/c/Users/anais/Documents/Cours 3A/Majeure_info/Technological_Foundations_of_Software_Development/TODO4/ml-audio/.venv/lib/python3.10/site-packages/librosa/core/audio.py:184: FutureWarning: librosa.core.audio.__audioread_load
+/ml-audio/.venv/lib/python3.10/site-packages/librosa/core/audio.py:184: FutureWarning: librosa.core.audio.__audioread_load
         Deprecated as of librosa version 0.10.0.
         It will be removed in librosa version 1.0.
   y, sr_native = __audioread_load(path, offset, duration, dtype)
@@ -137,14 +137,78 @@ You can modify the parameters of the model from the `train.py` file:
 
 ```
 # This values can be modified
-NUM_CLASSES = 10      # 10 genres
-BATCH_SIZE = 16       # Size of batches
-NUM_EPOCHS = 15       # 15 epochs
-LEARNING_RATE = 0.001 # Learning rate for the Adam optimiser
+NUM_CLASSES = 10        # 10 genres
+BATCH_SIZE = 16         # Size of batches (default, see --batch-size)
+NUM_WORKERS = 2         # Processes loading the data (default, see --num-workers)
+NUM_EPOCHS = 30         # Maximal number of epochs
+LEARNING_RATE = 0.0001  # Learning rate for the AdamW optimiser
+WEIGHT_DECAY = 0.0001   # Weight decay (regularisation) for AdamW
+PATIENCE = 5            # Stop if the validation loss does not improve for 5 epochs
+SEED = 42               # For reproductible results
 ```
 
-The file will create the files `model_trained.pth` (the trained model)
-and `class_map.json` (the file listing labels in order).
+The size of batches and the number of processes loading the data can also
+be changed in command line. If your computer does not have a lot of memory
+(e.g. WSL with less than 8 GB), you can reduce them:
+
+```
+poetry run python -m ml_audio.train --batch-size=8 --num-workers=0
+```
+
+**How the training works:**
+
+* **Segments:** each track (30 s) is cut into 10 segments of about 3 s. The
+model is trained on the segments, which gives 10 times more examples.
+* **Split:** the tracks are split with the *fault-filtered* partition of
+GTZAN ([Sturm, 2013](https://arxiv.org/abs/1306.1461);
+[Kereliuk et al., 2015](https://github.com/coreyker/dnn-mgr)): 443 tracks
+for training, 197 for validation and 290 for test. This partition removes
+the duplicates and puts all the tracks of an artist in the same split, so
+the results are not too optimistic. The lists of tracks are in the
+`src/ml_audio/splits` folder. The segments of a track are always in the
+same split.
+* **Standardisation:** the scalograms are standardised (mean 0, standard
+deviation 1) with values computed on the training set.
+* **Optimisation:** the learning rate is divided by 2 when the validation
+loss does not improve for 2 epochs. The training stops when the validation
+loss does not improve for `PATIENCE` epochs (early stopping), and the
+**best** model (lowest validation loss) is kept.
+
+The file will create the files `model_trained.pth` (the best model),
+`class_map.json` (the file listing labels in order and the standardisation
+values) and a `results` folder containing:
+
+* `training_history.csv`: loss, accuracy and learning rate of each epoch;
+* `training_curves.png`: training and validation curves (loss and accuracy);
+* the results of the evaluation on the test set (see next section).
+
+### Evaluation
+
+At the end of the training, the best model is evaluated on the test set.
+You can also evaluate the saved model again with this command:
+
+```
+poetry run python -m ml_audio.evaluate
+```
+
+The `--batch-size` and `--num-workers` arguments are also available.
+The prediction of a track is the mean of the probabilities of its
+segments. The command creates in the `results` folder:
+
+* `test_report.txt`: accuracy (on segments and on tracks), ROC AUC,
+precision, recall, F1-score, sensitivity and specificity of each genre;
+* `confusion_matrix.png`: the confusion matrix;
+* `roc_curves.png`: the ROC curve of each genre (one versus the others).
+
+**Example (extract of `test_report.txt`):**
+
+```
+Number of tracks: 290
+Number of segments: 2900
+Accuracy (segments): 59.76%
+Accuracy (tracks): 65.52%
+Macro ROC AUC (tracks, one vs rest): 0.940
+```
 
 ### Prediction
 
@@ -157,28 +221,32 @@ poetry run python -m ml_audio.predict <path_to_audio_file>
 Where `<path_to_audio_file>` is the path to you input `.wav` file.
 
 This command will print the prediction results, including the
-predicted label and the confidence.
+predicted label and the confidence. The file is cut into segments of
+about 3 s (as during training) and the probabilities of the segments
+are averaged.
 
-**Example:**
+**Example** (`jazz.00073.wav` is in the test set, so the model has never
+seen it during training):
 
 Input:
 
 ```
-poetry run python -m ml_audio.predict data/gtzan/audio/blues/blues.00010.wav
+poetry run python -m ml_audio.predict data/gtzan/audio/jazz/jazz.00073.wav
 ```
 
 Output:
 
 ```
-[INFO]  2025-12-04 00:24:54     Loading classes list from class_map.json
-[INFO]  2025-12-04 00:24:54     Loading the model architecture
-[INFO]  2025-12-04 00:24:55     Loading weights from model_trained.pth
-[INFO]  2025-12-04 00:24:55     Loading and processing the file ./data/gtzan/audio/blues/blues.00010.wav
+[INFO]  2026-10-01 09:08:38     Loading classes list from class_map.json
+[INFO]  2026-10-01 09:08:38     Loading the model architecture
+[INFO]  2026-10-01 09:08:38     Loading weights from model_trained.pth
+[INFO]  2026-10-01 09:08:39     Loading and processing the file data/gtzan/audio/jazz/jazz.00073.wav
 
 --- Prediction results ---
-File: ./data/gtzan/audio/blues/blues.00010.wav
-Prediction: BLUES
-Confidence: 98.46%
+File: data/gtzan/audio/jazz/jazz.00073.wav
+Number of segments (3 s): 10
+Prediction: JAZZ
+Confidence: 97.01%
 ```
 
 ### Other source files
@@ -186,13 +254,17 @@ Confidence: 98.46%
 **`dataset.py`**
 
 This Python file contains the definition of the GTZANDataset class. It defines methods
-`init`, `len` and `getitem` that the model will use.
+`init`, `len` and `getitem` that the model will use. An item of the dataset is a
+segment (about 3 s) of a scalogram. The file also contains functions for loading the
+fault-filtered split (`load_split`), cutting a scalogram into segments
+(`split_into_segments`) and computing the standardisation values (`compute_mean_std`).
 
 **`model.py`**
 
 This file loads the ReNet-18 model (transfer learning) and modifies it accordingly to
-the needs of the project. It only defines a function and should not be called by a user
-in command line (but it can be used in other scripts).
+the needs of the project. The first layer is adapted to 1 channel and keeps the
+pretrained filters (summed over the 3 RGB channels). It only defines a function and
+should not be called by a user in command line (but it can be used in other scripts).
 
 ## Documentation
 

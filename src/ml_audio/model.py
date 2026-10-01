@@ -23,6 +23,7 @@ def get_audio_resnet(num_classes=10):
     # Modify the first layer (conv1)
     # The layer 'conv1' originally expects 3 channels (in_channels=3),
     # it is replaced by a layer that accepts 1 channel
+    pretrained_conv1 = model.conv1
     model.conv1 = nn.Conv2d(
         in_channels=1,
         out_channels=64,  # number of filters (and then output channels)
@@ -30,6 +31,11 @@ def get_audio_resnet(num_classes=10):
         stride=(2, 2),  # the number of pixels the filter moves over
         padding=(3, 3),  # the number of pixels to add around the image
         bias=False,  # no bias (an additional parameter)
+    )
+    # Keep the pretrained filters instead of random ones: the weights
+    # of the 3 channels (RGB) are summed into 1 channel
+    model.conv1.weight.data = pretrained_conv1.weight.data.sum(
+        dim=1, keepdim=True
     )
 
     # Modify the last layer (output)

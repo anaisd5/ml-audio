@@ -24,6 +24,11 @@ Training
 .. automodule:: ml_audio.train
    :members:
 
+Evaluation
+----------
+.. automodule:: ml_audio.evaluate
+   :members:
+
 Prediction
 ----------
 .. automodule:: ml_audio.predict

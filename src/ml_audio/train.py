@@ -2,15 +2,17 @@ import argparse
 import json
 import logging
 import sys
+from pathlib import Path
 
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from sklearn.model_selection import train_test_split
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader
 
 # Import personalised modules
-from .dataset import GTZANDataset
+from .dataset import GTZANDataset, compute_mean_std, load_split
+from .evaluate import evaluate, plot_history
 from .model import get_audio_resnet
 
 # Declare the logger at module level
@@ -20,23 +22,37 @@ logger = logging.getLogger(__name__)
 
 # This values can be modified
 NUM_CLASSES = 10  # 10 genres
-BATCH_SIZE = 16  # Size of batches
-NUM_EPOCHS = 15  # 15 epochs
-LEARNING_RATE = 0.001  # Learning rate for the Adam optimiser
+BATCH_SIZE = 16  # Size of batches (default, see --batch-size)
+NUM_WORKERS = 2  # Processes loading the data (default, see --num-workers)
+NUM_EPOCHS = 30  # Maximal number of epochs
+LEARNING_RATE = 0.0001  # Learning rate for the AdamW optimiser
+WEIGHT_DECAY = 0.0001  # Weight decay (regularisation) for AdamW
+PATIENCE = 5  # Stop if the validation loss does not improve for 5 epochs
+SEED = 42  # For reproductible results
 DATA_DIR = "data/processed/scalograms"  # Folder of .npy files
 MODEL_SAVE_PATH = "model_trained.pth"
 MAP_SAVE_PATH = "class_map.json"
+RESULTS_DIR = "results"  # Folder for the history, reports and figures
 
 
-def train():
+def train(batch_size=BATCH_SIZE, num_workers=NUM_WORKERS):
     """
-    Function for training the model.
+    Function for training the model. The best model (lowest validation
+    loss) is saved, then evaluated on the test set.
 
+    :param batch_size: size of batches
+    :type batch_size: int
+    :param num_workers: number of processes loading the data
+                        (0 to use less memory)
+    :type num_workers: int
     :raises RuntimeError: if dataset cannot be loaded
     :returns: None
     """
 
     logger.info("Beginning training")
+
+    # Fix the seed for reproductible results
+    torch.manual_seed(SEED)
 
     # Hardware configuration
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -44,9 +60,10 @@ def train():
 
     # --- Preparing data ---
 
-    # Load the dataset
+    # Load the datasets with the fault-filtered split
+    # (the tracks of an artist are all in the same split)
     try:
-        full_dataset = GTZANDataset(data_dir=DATA_DIR)
+        train_dataset = GTZANDataset(DATA_DIR, track_names=load_split("train"))
     except RuntimeError as e:
         logger.critical(f"Error loading the dataset: {e}")
         logger.critical(
@@ -54,33 +71,49 @@ def train():
         )
         sys.exit(1)
 
-    # Save the class mapping (for predict.py)
-    class_map = {"classes": full_dataset.classes}
+    # Standardisation values, computed on the training set only
+    mean, std = compute_mean_std(train_dataset)
+    train_dataset.mean, train_dataset.std = mean, std
+    logger.info(f"Standardisation: mean={mean:.2f}, std={std:.2f}")
+
+    val_dataset = GTZANDataset(
+        DATA_DIR, track_names=load_split("valid"), mean=mean, std=std
+    )
+    test_dataset = GTZANDataset(
+        DATA_DIR, track_names=load_split("test"), mean=mean, std=std
+    )
+
+    # Save the class mapping and the standardisation values (for predict.py)
+    class_map = {"classes": train_dataset.classes, "mean": mean, "std": std}
     with open(MAP_SAVE_PATH, "w") as f:
         json.dump(class_map, f)
     logger.info(f"Mapping classes saved in: {MAP_SAVE_PATH}")
 
-    # Separate training (80%) and validation (20%)
-    labels = [f.parent.name for f in full_dataset.files]
-    train_idx, val_idx = train_test_split(
-        list(range(len(full_dataset))),
-        test_size=0.2,  # 20% for validation
-        stratify=labels,  # ensure a fair repartition of genres
-        random_state=42,  # for reproductible results
+    logger.info(
+        f"Training set size: {len(train_dataset.files)} tracks, "
+        f"{len(train_dataset)} segments"
     )
-
-    train_dataset = Subset(full_dataset, train_idx)
-    val_dataset = Subset(full_dataset, val_idx)
-
-    logger.info(f"Training set size: {len(train_dataset)}")
-    logger.info(f"Validation set size: {len(val_dataset)}")
+    logger.info(
+        f"Validation set size: {len(val_dataset.files)} tracks, "
+        f"{len(val_dataset)} segments"
+    )
+    logger.info(
+        f"Test set size: {len(test_dataset.files)} tracks, "
+        f"{len(test_dataset)} segments"
+    )
 
     # Create Dataloaders
     train_loader = DataLoader(
-        train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,
     )
     val_loader = DataLoader(
-        val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=2
+        val_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
     )
 
     # --- Initialise model, loss and optimiser ---
@@ -89,9 +122,20 @@ def train():
     model = model.to(device)  # Send the model on GPU
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    optimizer = optim.AdamW(
+        model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
+    )
+    # Divide the learning rate by 2 if the validation loss does not
+    # improve for 2 epochs
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode="min", factor=0.5, patience=2
+    )
 
     # --- Traning and validation loop ---
+
+    history = []  # one line per epoch
+    best_val_loss = float("inf")
+    epochs_without_improvement = 0
 
     for epoch in range(NUM_EPOCHS):
         logger.info(f"--- Starting Epoch {epoch + 1}/{NUM_EPOCHS} ---")
@@ -153,20 +197,70 @@ def train():
                 Acc: {epoch_val_acc:.2f}%"
         )
 
+        # Store the statistics of the epoch
+        history.append(
+            {
+                "epoch": epoch + 1,
+                "train_loss": epoch_loss,
+                "train_acc": epoch_acc,
+                "val_loss": epoch_val_loss,
+                "val_acc": epoch_val_acc,
+                "learning_rate": optimizer.param_groups[0]["lr"],
+            }
+        )
+
+        scheduler.step(epoch_val_loss)
+
+        # --- Save the best model and early stopping ---
+        if epoch_val_loss < best_val_loss:
+            best_val_loss = epoch_val_loss
+            epochs_without_improvement = 0
+            torch.save(model.state_dict(), MODEL_SAVE_PATH)
+            logger.info(f"Best model so far saved in: {MODEL_SAVE_PATH}")
+        else:
+            epochs_without_improvement += 1
+            if epochs_without_improvement >= PATIENCE:
+                logger.info(
+                    f"No improvement for {PATIENCE} epochs: early stopping."
+                )
+                break
+
     logger.info("Training done.")
 
-    # --- Save the model ---
-    torch.save(model.state_dict(), MODEL_SAVE_PATH)
-    logger.info(f"Model saved in: {MODEL_SAVE_PATH}")
+    # --- Save the history and the curves ---
+    results_dir = Path(RESULTS_DIR)
+    results_dir.mkdir(parents=True, exist_ok=True)
+    history = pd.DataFrame(history)
+    history.to_csv(results_dir / "training_history.csv", index=False)
+    plot_history(history, results_dir / "training_curves.png")
+    logger.info(f"Training history and curves saved in: {results_dir}")
+
+    # --- Evaluate the best model on the test set ---
+    logger.info("Evaluating the best model on the test set")
+    model.load_state_dict(torch.load(MODEL_SAVE_PATH, map_location=device))
+    evaluate(model, test_dataset, device, batch_size, num_workers, results_dir)
 
 
 if __name__ == "__main__":
     # Argument parser
-    parser = argparse.ArgumentParser(description="Preprocess audio files.")
+    parser = argparse.ArgumentParser(description="Train the model.")
     parser.add_argument(
         "--log",
         default="INFO",
         help="Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=BATCH_SIZE,
+        help=f"Size of batches (default: {BATCH_SIZE})",
+    )
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=NUM_WORKERS,
+        help=f"Number of processes loading the data "
+        f"(default: {NUM_WORKERS}, 0 to use less memory)",
     )
 
     args = parser.parse_args()
@@ -188,4 +282,4 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
 
     # Call the training function
-    train()
+    train(batch_size=args.batch_size, num_workers=args.num_workers)

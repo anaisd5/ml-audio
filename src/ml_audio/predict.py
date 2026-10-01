@@ -7,6 +7,7 @@ import librosa
 import numpy as np
 import torch
 
+from .dataset import split_into_segments
 from .model import get_audio_resnet
 
 # Declare the logger at module level
@@ -15,17 +16,23 @@ logger = logging.getLogger(__name__)
 # --- Parameters ---
 MODEL_PATH = "model_trained.pth"
 CLASS_MAP_PATH = "class_map.json"
-FIXED_WIDTH = 1280  # should be the same during training
 
 
-def preprocess_single_file(file_path):
+def preprocess_single_file(file_path, mean, std):
     """
-    Function preprocessing one file.
+    Function preprocessing one file. The scalogram is cut into segments
+    of about 3 seconds (as during training).
 
     :param file_path: the path to the audio file to process
     :type file_path: str | Path
+    :param mean: mean used to standardise the scalogram
+                 (computed during training)
+    :type mean: float
+    :param std: standard deviation used to standardise the scalogram
+                (computed during training)
+    :type std: float
     :raises Exception: if the audio file cannot be loaded or processed
-    :returns: a tensor ready for model input
+    :returns: a tensor ready for model input (one item per segment)
     :rtype: torch.Tensor
     """
 
@@ -44,16 +51,14 @@ def preprocess_single_file(file_path):
         C = librosa.cqt(y, sr=sr, fmin=librosa.note_to_hz("C1"))
         C_db = librosa.amplitude_to_db(np.abs(C), ref=np.max)
 
-        # Manage padding / truncating (as in the dataset)
-        current_width = C_db.shape[1]
-        if current_width > FIXED_WIDTH:
-            C_db = C_db[:, :FIXED_WIDTH]
-        else:
-            pad_width = FIXED_WIDTH - current_width
-            C_db = np.pad(C_db, ((0, 0), (0, pad_width)), mode="constant")
+        # Cut into segments (as in the dataset)
+        segments = split_into_segments(C_db)
 
-        # Format for PyTorch (Batch=1, Channel=1, H, W)
-        tensor_input = torch.from_numpy(C_db).float().unsqueeze(0).unsqueeze(0)
+        # Standardisation (as in the dataset)
+        segments = (segments - mean) / std
+
+        # Format for PyTorch (Batch=Number of segments, Channel=1, H, W)
+        tensor_input = torch.from_numpy(segments).float().unsqueeze(1)
 
         return tensor_input
 
@@ -73,11 +78,12 @@ def predict(file_to_predict):
     :returns: None
     """
 
-    # Loading classes list (from JSON)
+    # Loading classes list and standardisation values (from JSON)
     logger.info(f"Loading classes list from {CLASS_MAP_PATH}")
     try:
         with open(CLASS_MAP_PATH, "r") as f:
-            classes = json.load(f)["classes"]
+            class_map = json.load(f)
+        classes = class_map["classes"]
         num_classes = len(classes)
     except FileNotFoundError:
         logger.critical(f"Error : File {CLASS_MAP_PATH} not found.")
@@ -101,7 +107,9 @@ def predict(file_to_predict):
     model.eval()  # put the model in validation mode
 
     # Preprocess the audio file
-    input_tensor = preprocess_single_file(file_to_predict)
+    input_tensor = preprocess_single_file(
+        file_to_predict, class_map["mean"], class_map["std"]
+    )
     if input_tensor is None:
         return
 
@@ -109,14 +117,16 @@ def predict(file_to_predict):
     with torch.no_grad():
         input_tensor = input_tensor.to(device)
         output_logits = model(input_tensor)
-        probabilities = torch.softmax(output_logits, dim=1)
-        predicted_index = probabilities.argmax(dim=1).item()
+        # Mean of the probabilities of all segments
+        probabilities = torch.softmax(output_logits, dim=1).mean(dim=0)
+        predicted_index = probabilities.argmax().item()
 
         predicted_class = classes[predicted_index]
-        confidence = probabilities[0][predicted_index].item()
+        confidence = probabilities[predicted_index].item()
 
     print("\n--- Prediction results ---")
     print(f"File: {file_to_predict}")
+    print(f"Number of segments (3 s): {input_tensor.shape[0]}")
     print(f"Prediction: {predicted_class.upper()}")
     print(f"Confidence: {confidence * 100:.2f}%")
 
@@ -124,7 +134,9 @@ def predict(file_to_predict):
 if __name__ == "__main__":
 
     # Argument parser
-    parser = argparse.ArgumentParser(description="Preprocess audio files.")
+    parser = argparse.ArgumentParser(
+        description="Predict the genre of an audio file."
+    )
 
     # Obligatory argument: file path
     parser.add_argument(

@@ -47,23 +47,38 @@ Run the training script:
 poetry run python -m ml_audio.train
 ```
 
-**Expected result:** The script will output the "Loss" and "Accuracy" for each epoch. After a few minutes, a `model_trained.pth` file is created.
+If your computer does not have a lot of memory, you can reduce the size of batches and the number of processes loading the data:
 
-## Step 5: Make a Prediction
+```
+poetry run python -m ml_audio.train --batch-size=8 --num-workers=0
+```
+
+**Expected result:** The script will output the "Loss" and "Accuracy" for each epoch. The training stops automatically when the validation loss does not improve anymore (early stopping). After a few minutes, a `model_trained.pth` file (the best model) is created, and the model is evaluated on the test set.
+
+## Step 5: Look at the results
+
+Open the `results` folder:
+
+* `training_curves.png` shows the training and validation curves;
+* `test_report.txt` gives the accuracy, the ROC AUC, the sensitivity and the specificity of each genre on the test set;
+* `confusion_matrix.png` and `roc_curves.png` show which genres are confused.
+
+## Step 6: Make a Prediction
 
 Let's test your new model on a real file!
 
 ```
-poetry run python -m ml_audio.predict data/gtzan/audio/jazz/jazz.00054.wav
+poetry run python -m ml_audio.predict data/gtzan/audio/jazz/jazz.00073.wav
 ```
 
 You should see an output similar to:
 
 ```
 --- Prediction results ---
-File: ./data/gtzan/audio/jazz/jazz.00054.wav
+File: data/gtzan/audio/jazz/jazz.00073.wav
+Number of segments (3 s): 10
 Prediction: JAZZ
-Confidence: 95.43%
+Confidence: 97.01%
 ```
 
 Congratulations! You have successfully trained and tested an audio classification model.

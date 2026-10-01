@@ -29,3 +29,6 @@ docs/_build/
 
 # Releases
 dist/
+
+# Results (history, reports and figures)
+results/

@@ -1,4 +1,5 @@
 import torch
+from torchvision import models
 
 from ml_audio.model import get_audio_resnet
 
@@ -53,3 +54,17 @@ def test_model_input_channels():
     assert (
         model.conv1.in_channels == 1
     ), "The first layer should expect 1 channel (audio), not 3."
+
+
+def test_model_input_layer_pretrained():
+    """
+    Check that the first layer keeps the pretrained filters
+    (summed over the 3 RGB channels) instead of random ones.
+    """
+    model = get_audio_resnet()
+    pretrained = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+
+    expected = pretrained.conv1.weight.data.sum(dim=1, keepdim=True)
+    assert torch.allclose(
+        model.conv1.weight.data, expected
+    ), "The first layer should be initialised with the pretrained weights."
