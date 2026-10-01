@@ -13,6 +13,7 @@ from torch.utils.data import DataLoader
 # Import personalised modules
 from .dataset import GTZANDataset, compute_mean_std, load_split
 from .evaluate import evaluate, plot_history
+from .features import DEFAULT_FEATURES, FEATURES_DIRS
 from .model import get_audio_resnet
 
 # Declare the logger at module level
@@ -32,7 +33,6 @@ PATIENCE = 5  # Stop if the validation loss does not improve for 5 epochs
 SEED = 42  # For reproductible results
 MIXUP_ALPHA = 0.4  # Parameter of the Beta distribution for mixup
 FROZEN_LAYERS = 0  # Groups of layers frozen (default, see --frozen-layers)
-DATA_DIR = "data/processed/scalograms"  # Folder of .npy files
 MODEL_SAVE_PATH = "model_trained.pth"
 MAP_SAVE_PATH = "class_map.json"
 RESULTS_DIR = "results"  # Folder for the history, reports and figures
@@ -72,6 +72,7 @@ def train(
     augment=True,
     num_threads=NUM_THREADS,
     frozen_layers=FROZEN_LAYERS,
+    features=DEFAULT_FEATURES,
 ):
     """
     Function for training the model. The best model (lowest validation
@@ -91,11 +92,18 @@ def train(
     :param frozen_layers: number of groups of layers of the ResNet (from
                           0 to 4) that keep their pretrained weights
     :type frozen_layers: int
+    :param features: the type of features ('cqt' or 'mel'), the files
+                     should first be created by preprocess.py
+    :type features: str
     :raises RuntimeError: if dataset cannot be loaded
     :returns: None
     """
 
     logger.info("Beginning training")
+
+    # Folder of .npy files
+    DATA_DIR = FEATURES_DIRS[features]
+    logger.info(f"Features: {features} ({DATA_DIR})")
 
     # Fix the seed for reproductible results
     torch.manual_seed(SEED)
@@ -137,8 +145,14 @@ def train(
         DATA_DIR, track_names=load_split("test"), mean=mean, std=std
     )
 
-    # Save the class mapping and the standardisation values (for predict.py)
-    class_map = {"classes": train_dataset.classes, "mean": mean, "std": std}
+    # Save the class mapping, the standardisation values and the type
+    # of features (for predict.py)
+    class_map = {
+        "classes": train_dataset.classes,
+        "mean": mean,
+        "std": std,
+        "features": features,
+    }
     with open(MAP_SAVE_PATH, "w") as f:
         json.dump(class_map, f)
     logger.info(f"Mapping classes saved in: {MAP_SAVE_PATH}")
@@ -351,6 +365,13 @@ if __name__ == "__main__":
         f"pretrained weights (default: {FROZEN_LAYERS})",
     )
     parser.add_argument(
+        "--features",
+        default=DEFAULT_FEATURES,
+        choices=FEATURES_DIRS.keys(),
+        help=f"Type of features: 'cqt' (scalogram) or 'mel' (mel "
+        f"spectrogram) (default: {DEFAULT_FEATURES})",
+    )
+    parser.add_argument(
         "--no-augment",
         action="store_true",
         help="Train without data augmentation (random crop, SpecAugment "
@@ -382,4 +403,5 @@ if __name__ == "__main__":
         augment=not args.no_augment,
         num_threads=args.num_threads,
         frozen_layers=args.frozen_layers,
+        features=args.features,
     )

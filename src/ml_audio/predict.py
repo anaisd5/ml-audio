@@ -4,10 +4,10 @@ import logging
 import sys
 
 import librosa
-import numpy as np
 import torch
 
 from .dataset import split_into_segments
+from .features import DEFAULT_FEATURES, compute_features
 from .model import get_audio_resnet
 
 # Declare the logger at module level
@@ -18,7 +18,7 @@ MODEL_PATH = "model_trained.pth"
 CLASS_MAP_PATH = "class_map.json"
 
 
-def preprocess_single_file(file_path, mean, std):
+def preprocess_single_file(file_path, mean, std, features=DEFAULT_FEATURES):
     """
     Function preprocessing one file. The scalogram is cut into segments
     of about 3 seconds (as during training).
@@ -31,6 +31,9 @@ def preprocess_single_file(file_path, mean, std):
     :param std: standard deviation used to standardise the scalogram
                 (computed during training)
     :type std: float
+    :param features: the type of features ('cqt' or 'mel'), it should be
+                     the same as during training
+    :type features: str
     :raises Exception: if the audio file cannot be loaded or processed
     :returns: a tensor ready for model input (one item per segment)
     :rtype: torch.Tensor
@@ -47,12 +50,11 @@ def preprocess_single_file(file_path, mean, std):
                            Quality might be poor."
             )
 
-        # Calculate the scalogram
-        C = librosa.cqt(y, sr=sr, fmin=librosa.note_to_hz("C1"))
-        C_db = librosa.amplitude_to_db(np.abs(C), ref=np.max)
+        # Calculate the scalogram (or the mel spectrogram)
+        features_db = compute_features(y, sr, features)
 
         # Cut into segments (as in the dataset)
-        segments = split_into_segments(C_db)
+        segments = split_into_segments(features_db)
 
         # Standardisation (as in the dataset)
         segments = (segments - mean) / std
@@ -107,8 +109,12 @@ def predict(file_to_predict):
     model.eval()  # put the model in validation mode
 
     # Preprocess the audio file
+    # (with the type of features used during training)
     input_tensor = preprocess_single_file(
-        file_to_predict, class_map["mean"], class_map["std"]
+        file_to_predict,
+        class_map["mean"],
+        class_map["std"],
+        class_map.get("features", DEFAULT_FEATURES),
     )
     if input_tensor is None:
         return

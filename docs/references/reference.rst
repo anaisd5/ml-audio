@@ -8,6 +8,11 @@ Preprocessing
 .. automodule:: ml_audio.preprocess
    :members:
 
+Features
+--------
+.. automodule:: ml_audio.features
+   :members:
+
 Dataset Loading
 ---------------
 .. automodule:: ml_audio.dataset

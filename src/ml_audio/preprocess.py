@@ -7,26 +7,26 @@ import librosa
 import numpy as np
 from tqdm import tqdm
 
+from .features import DEFAULT_FEATURES, FEATURES_DIRS, compute_features
+
 # Declare the logger at module level
 logger = logging.getLogger(__name__)
 
 # Files definition
 SOURCE_DIR = Path("data/gtzan/audio/")
-TARGET_DIR = Path("data/processed/scalograms/")
-
-# Check if the output directory exist and if not create it with parents
-TARGET_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def process_file(file_path, target_path):
+def process_file(file_path, target_path, features=DEFAULT_FEATURES):
     """
     Load an audio file, transform it into a CQT scalogram
-    and save it in a Numpy array.
+    (or a mel spectrogram) and save it in a Numpy array.
 
     :param file_path: the path to the audio file to process
     :type file_path: str | Path
     :param target_path: the path to save the output file
     :type target_path: str | Path
+    :param features: the type of features ('cqt' or 'mel')
+    :type features: str
     :raises Exception: if the audio file cannot be loaded or processed
     :returns: None
     """
@@ -45,18 +45,11 @@ def process_file(file_path, target_path):
                            Quality might be poor."
             )
 
-        # Do the Constant Q Transform
-
-        # fmin is a filter: only consider notes higher than C1
-        # C is a 2D Numpy array with complex numbers
-        C = librosa.cqt(y, sr=sr, fmin=librosa.note_to_hz("C1"))
-        # only consider the amplitude of the signal (not the phase)
-        # convert into dB (negative since the reference is
-        # max amplitude of the signal)
-        C_db = librosa.amplitude_to_db(np.abs(C), ref=np.max)
+        # Do the Constant Q Transform (or the mel spectrogram), in dB
+        features_db = compute_features(y, sr, features)
 
         # Save raw data (Numpy array) at target_path
-        np.save(target_path, C_db)
+        np.save(target_path, features_db)
 
     except Exception as e:
         logger.error(f"Failed to process {file_path}: {e}")
@@ -70,6 +63,13 @@ if __name__ == "__main__":
         "--log",
         default="INFO",
         help="Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+    )
+    parser.add_argument(
+        "--features",
+        default=DEFAULT_FEATURES,
+        choices=FEATURES_DIRS.keys(),
+        help=f"Type of features: 'cqt' (scalogram) or 'mel' (mel "
+        f"spectrogram) (default: {DEFAULT_FEATURES})",
     )
 
     args = parser.parse_args()
@@ -90,8 +90,13 @@ if __name__ == "__main__":
     )
     logger = logging.getLogger(__name__)
 
+    # Check if the output directory exist and if not create it with parents
+    TARGET_DIR = Path(FEATURES_DIRS[args.features])
+    TARGET_DIR.mkdir(parents=True, exist_ok=True)
+
     # Start preprocessing
     logger.info("Starting preprocessing")
+    logger.info(f"Features: {args.features}")
     logger.info(f"Source: {SOURCE_DIR}")
     logger.info(f"Destination: {TARGET_DIR}")
 
@@ -127,6 +132,6 @@ if __name__ == "__main__":
         target_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Call the function to process the file
-        process_file(file_path, target_path)
+        process_file(file_path, target_path, args.features)
 
     logger.info("Preprocessing done.")

@@ -8,6 +8,7 @@ from ml_audio.dataset import (
     spec_augment,
     split_into_segments,
 )
+from ml_audio.features import N_MELS, compute_features
 
 
 def test_split_into_segments_shape():
@@ -95,3 +96,23 @@ def test_dataset_augment(tmp_path):
     assert label == 0
     # Without augmentation, the result is always the same
     assert (dataset[3][0] == data).all()
+
+
+def test_compute_features():
+    """
+    Check that both types of features have the expected height, the
+    same width (so segments have the same duration) and values in dB
+    between -80 and 0.
+    """
+    sr = 22050
+    y = np.random.randn(3 * sr).astype(np.float32)  # 3 s of noise
+
+    cqt = compute_features(y, sr, "cqt")
+    mel = compute_features(y, sr, "mel")
+
+    assert cqt.shape[0] == 84
+    assert mel.shape[0] == N_MELS
+    assert cqt.shape[1] == mel.shape[1]
+    for features in (cqt, mel):
+        assert features.min() >= -80.0 - 1e-4
+        assert features.max() <= 1e-4

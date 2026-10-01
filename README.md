@@ -125,6 +125,15 @@ Files preprocessing: 100%|██████████████████
 [INFO]  2025-12-03 23:43:20     Preprocessing done.
 ```
 
+By default, the audio files are transformed into CQT scalograms (84
+frequency bins, one per semitone). With the `--features` argument, you can
+create mel spectrograms instead (128 frequency bands), which are saved in
+`data/processed/melspectrograms`:
+
+```
+poetry run python -m ml_audio.preprocess --features=mel
+```
+
 ### Training the model
 
 For training a model, you should run the following command:
@@ -205,6 +214,21 @@ frozen.
 
   ```
   poetry run python -m ml_audio.train --frozen-layers=2
+  ```
+* **Features:** by default, the model is trained on the CQT scalograms. The
+`--features=mel` argument trains it on the mel spectrograms (they should
+first be created with `preprocess`, see above). The type of features is
+saved in `class_map.json`, so `evaluate` and `predict` use the right one
+automatically.
+
+  **Note:** the mel spectrograms do not improve the performance. In our
+  tests, the accuracy on the test set was 65.5% with mel and 67.2% with CQT
+  (ROC AUC: 0.931 and 0.930, one training each), a difference too small to
+  be significant. The mel spectrograms were better on pop and metal, the
+  CQT scalograms on jazz and rock. The option is kept for experimentation.
+
+  ```
+  poetry run python -m ml_audio.train --features=mel
   ```
 * **Standardisation:** the scalograms are standardised (mean 0, standard
 deviation 1) with values computed on the training set.
@@ -290,6 +314,12 @@ Confidence: 84.64%
 ```
 
 ### Other source files
+
+**`features.py`**
+
+This file contains the function transforming an audio signal into a CQT scalogram
+or a mel spectrogram (`compute_features`). It is used by `preprocess.py` and
+`predict.py`, so that the same transformation is applied to all files.
 
 **`dataset.py`**
 

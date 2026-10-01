@@ -16,13 +16,13 @@ from sklearn.metrics import (
 from torch.utils.data import DataLoader
 
 from .dataset import GTZANDataset, load_split
+from .features import DEFAULT_FEATURES, FEATURES_DIRS
 from .model import get_audio_resnet
 
 # Declare the logger at module level
 logger = logging.getLogger(__name__)
 
 # --- Parameters ---
-DATA_DIR = "data/processed/scalograms"  # Folder of .npy files
 MODEL_PATH = "model_trained.pth"
 CLASS_MAP_PATH = "class_map.json"
 RESULTS_DIR = "results"  # Folder for the reports and figures
@@ -343,6 +343,9 @@ if __name__ == "__main__":
     torch.set_num_threads(args.num_threads)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # Folder of .npy files (with the type of features used during training)
+    DATA_DIR = FEATURES_DIRS[class_map.get("features", DEFAULT_FEATURES)]
 
     test_dataset = GTZANDataset(
         DATA_DIR,
