@@ -31,6 +31,7 @@ WEIGHT_DECAY = 0.0001  # Weight decay (regularisation) for AdamW
 PATIENCE = 5  # Stop if the validation loss does not improve for 5 epochs
 SEED = 42  # For reproductible results
 MIXUP_ALPHA = 0.4  # Parameter of the Beta distribution for mixup
+FROZEN_LAYERS = 0  # Groups of layers frozen (default, see --frozen-layers)
 DATA_DIR = "data/processed/scalograms"  # Folder of .npy files
 MODEL_SAVE_PATH = "model_trained.pth"
 MAP_SAVE_PATH = "class_map.json"
@@ -70,6 +71,7 @@ def train(
     num_workers=NUM_WORKERS,
     augment=True,
     num_threads=NUM_THREADS,
+    frozen_layers=FROZEN_LAYERS,
 ):
     """
     Function for training the model. The best model (lowest validation
@@ -86,6 +88,9 @@ def train(
     :param num_threads: number of CPU cores used by PyTorch (a low value
                         keeps the computer usable during the training)
     :type num_threads: int
+    :param frozen_layers: number of groups of layers of the ResNet (from
+                          0 to 4) that keep their pretrained weights
+    :type frozen_layers: int
     :raises RuntimeError: if dataset cannot be loaded
     :returns: None
     """
@@ -167,12 +172,18 @@ def train(
 
     # --- Initialise model, loss and optimiser ---
 
-    model = get_audio_resnet(num_classes=NUM_CLASSES)
+    model = get_audio_resnet(
+        num_classes=NUM_CLASSES, frozen_layers=frozen_layers
+    )
+    logger.info(f"Groups of layers frozen: {frozen_layers}")
     model = model.to(device)  # Send the model on GPU
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.AdamW(
-        model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
+        # only the parameters that are not frozen
+        [param for param in model.parameters() if param.requires_grad],
+        lr=LEARNING_RATE,
+        weight_decay=WEIGHT_DECAY,
     )
     # Divide the learning rate by 2 if the validation loss does not
     # improve for 2 epochs
@@ -332,6 +343,14 @@ if __name__ == "__main__":
         f"reduce it to keep the computer usable)",
     )
     parser.add_argument(
+        "--frozen-layers",
+        type=int,
+        default=FROZEN_LAYERS,
+        choices=range(5),
+        help=f"Number of groups of layers of the ResNet that keep their "
+        f"pretrained weights (default: {FROZEN_LAYERS})",
+    )
+    parser.add_argument(
         "--no-augment",
         action="store_true",
         help="Train without data augmentation (random crop, SpecAugment "
@@ -362,4 +381,5 @@ if __name__ == "__main__":
         num_workers=args.num_workers,
         augment=not args.no_augment,
         num_threads=args.num_threads,
+        frozen_layers=args.frozen_layers,
     )

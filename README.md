@@ -147,6 +147,7 @@ WEIGHT_DECAY = 0.0001   # Weight decay (regularisation) for AdamW
 PATIENCE = 5            # Stop if the validation loss does not improve for 5 epochs
 SEED = 42               # For reproductible results
 MIXUP_ALPHA = 0.4       # Parameter of the Beta distribution for mixup
+FROZEN_LAYERS = 0       # Groups of layers frozen (default, see --frozen-layers)
 ```
 
 The parameters of SpecAugment (number and size of the masks) can be modified
@@ -191,6 +192,19 @@ used to limit overfitting:
 
   ```
   poetry run python -m ml_audio.train --no-augment
+  ```
+* **Frozen layers:** the `--frozen-layers` argument (from 0 to 4) freezes
+the first groups of layers of the ResNet-18: they keep their pretrained
+weights and only the last layers are trained. By default, nothing is
+frozen.
+
+  **Note:** freezing layers does not improve the performance. In our tests,
+  freezing 2 or 3 groups gave a lower accuracy on the test set (61.0% and
+  62.4% instead of 67.2%, one training each). The option is kept for
+  experimentation.
+
+  ```
+  poetry run python -m ml_audio.train --frozen-layers=2
   ```
 * **Standardisation:** the scalograms are standardised (mean 0, standard
 deviation 1) with values computed on the training set.
@@ -290,7 +304,8 @@ computing the standardisation values (`compute_mean_std`).
 
 This file loads the ReNet-18 model (transfer learning) and modifies it accordingly to
 the needs of the project. The first layer is adapted to 1 channel and keeps the
-pretrained filters (summed over the 3 RGB channels). It only defines a function and
+pretrained filters (summed over the 3 RGB channels). The first groups of layers
+can be frozen (`frozen_layers`). It only defines a function and
 should not be called by a user in command line (but it can be used in other scripts).
 
 ## Documentation

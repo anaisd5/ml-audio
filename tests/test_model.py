@@ -87,3 +87,19 @@ def test_mixup():
     # labels_b gives the order of the other examples
     expected = lam * inputs + (1 - lam) * inputs[labels_b]
     assert torch.allclose(mixed, expected)
+
+
+def test_model_frozen_layers():
+    """
+    Check that the frozen layers are not trainable and that the other
+    layers still are.
+    """
+    model = get_audio_resnet(frozen_layers=2)
+
+    frozen = [model.conv1, model.bn1, model.layer1, model.layer2]
+    trainable = [model.layer3, model.layer4, model.fc]
+
+    for module in frozen:
+        assert not any(param.requires_grad for param in module.parameters())
+    for module in trainable:
+        assert all(param.requires_grad for param in module.parameters())
